@@ -43,3 +43,33 @@ targets:
         # Assinatura automática para instalar no iPad Air 5. O simulador ignora isto.
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: J5YKV9K4P8
+
+  FastReadUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App/UITests
+    dependencies:
+      - target: FastRead
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rafaelg.FastReadUITests
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "2"
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: J5YKV9K4P8
+        TEST_TARGET_NAME: FastRead
+
+schemes:
+  FastRead:
+    build:
+      targets:
+        FastRead: all
+        FastReadUITests: [test]
+    test:
+      targets:
+        - FastReadUITests
+    run:
+      config: Debug

@@ -17,10 +17,18 @@ public enum SynthesisError: Error, Sendable, Equatable {
 }
 
 public protocol SegmentSynthesizing: Sendable {
-    func synthesize(text: String, language: String, rate: Float) async throws -> SynthesizedSegment
+    /// `voiceIdentifier` nulo significa "a melhor voz instalada para o idioma".
+    func synthesize(text: String, language: String, rate: Float,
+                    voiceIdentifier: String?) async throws -> SynthesizedSegment
     /// Voz que seria usada para este idioma. Entra na chave de cache: trocar de voz
     /// precisa invalidar o áudio já gerado.
     func voiceIdentifier(for language: String) -> String?
+}
+
+extension SegmentSynthesizing {
+    public func synthesize(text: String, language: String, rate: Float) async throws -> SynthesizedSegment {
+        try await synthesize(text: text, language: language, rate: rate, voiceIdentifier: nil)
+    }
 }
 
 /// Sintetiza um segmento em AAC e captura o alinhamento palavra-a-palavra.
@@ -45,10 +53,6 @@ public final class AVSpeechSynthesisEngine: SegmentSynthesizing, @unchecked Send
         self.bitRate = bitRate
         self.outputDirectory = outputDirectory
         self.timeout = timeout
-    }
-
-    public func synthesize(text: String, language: String, rate: Float) async throws -> SynthesizedSegment {
-        try await synthesize(text: text, language: language, rate: rate, voiceIdentifier: nil)
     }
 
     public func synthesize(

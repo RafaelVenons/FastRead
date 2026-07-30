@@ -4,10 +4,13 @@ import Foundation
 public struct ReadingSegment: Sendable, Equatable {
     public let text: String
     public let language: String
+    /// Voz escolhida pelo usuário; nulo usa a melhor instalada para o idioma.
+    public let voiceIdentifier: String?
 
-    public init(text: String, language: String) {
+    public init(text: String, language: String, voiceIdentifier: String? = nil) {
         self.text = text
         self.language = language
+        self.voiceIdentifier = voiceIdentifier
     }
 }
 
@@ -42,9 +45,11 @@ public actor SegmentPipeline {
     }
 
     public nonisolated func key(for segment: ReadingSegment) -> SegmentKey {
-        SegmentKey(text: segment.text,
-                   voiceIdentifier: synthesizer.voiceIdentifier(for: segment.language) ?? segment.language,
-                   rate: rate)
+        // A voz efetiva entra na chave: trocar de voz tem que invalidar o áudio gerado.
+        let voice = segment.voiceIdentifier
+            ?? synthesizer.voiceIdentifier(for: segment.language)
+            ?? segment.language
+        return SegmentKey(text: segment.text, voiceIdentifier: voice, rate: rate)
     }
 
     /// Entrega o segmento pronto para tocar, sintetizando apenas se necessário.
@@ -102,11 +107,15 @@ public actor SegmentPipeline {
         }
     }
 
-    private func makeTask(key: SegmentKey, segment: ReadingSegment) -> Task<CachedSegment, Error> {
+    /// `nonisolated` de propósito: um `Task` criado dentro de contexto isolado ao actor
+    /// herda esse isolamento e passa a rodar no executor do actor — o que serializaria o
+    /// prefetch. Medido: 3 segmentos levavam 0,65 s (soma) em vez de ~0,2 s (paralelo).
+    private nonisolated func makeTask(key: SegmentKey, segment: ReadingSegment) -> Task<CachedSegment, Error> {
         Task { [synthesizer, cache, rate] in
             let produced = try await synthesizer.synthesize(text: segment.text,
                                                             language: segment.language,
-                                                            rate: rate)
+                                                            rate: rate,
+                                                            voiceIdentifier: segment.voiceIdentifier)
             // Se o usuário pulou adiante enquanto isto rodava, não suja o cache.
             guard !Task.isCancelled else {
                 try? FileManager.default.removeItem(at: produced.audioURL)

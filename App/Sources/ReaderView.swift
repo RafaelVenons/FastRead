@@ -6,6 +6,7 @@ struct ReaderView: View {
 
     @State private var model = ReaderModel()
     @State private var showingImporter = false
+    @State private var showingVoices = false
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,15 @@ struct ReaderView: View {
                       allowedContentTypes: [.pdf]) { result in
             if case .success(let url) = result { model.open(url: url) }
         }
+        .sheet(isPresented: $showingVoices) {
+            VoicePickerView(model: model)
+        }
+        .task {
+            // Permite que os testes de UI abram um PDF sem passar pelo seletor de arquivos.
+            if let path = ProcessInfo.processInfo.environment["FASTREAD_OPEN_PDF"] {
+                model.open(url: URL(fileURLWithPath: path))
+            }
+        }
     }
 
     private var emptyState: some View {
@@ -49,6 +59,13 @@ struct ReaderView: View {
             Button { showingImporter = true } label: { Image(systemName: "folder") }
         }
         ToolbarItem(placement: .topBarTrailing) {
+            Button { showingVoices = true } label: {
+                Image(systemName: "waveform.circle")
+            }
+            .disabled(model.availableVoices.isEmpty)
+            .accessibilityIdentifier("voicePicker")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Picker("Velocidade", selection: $model.rate) {
                     Text("Lenta").tag(Float(0.42))
@@ -62,6 +79,7 @@ struct ReaderView: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
+            .accessibilityIdentifier("settingsMenu")
         }
     }
 
@@ -71,6 +89,7 @@ struct ReaderView: View {
                 Text(model.status)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("status")
             }
 
             HStack(spacing: 28) {
@@ -78,6 +97,7 @@ struct ReaderView: View {
                     Image(systemName: "backward.end.fill")
                 }
                 .disabled(model.currentIndex == nil)
+                .accessibilityIdentifier("previous")
 
                 Button { model.togglePlayPause() } label: {
                     Image(systemName: model.isPreparing
@@ -87,11 +107,13 @@ struct ReaderView: View {
                     .symbolEffect(.pulse, isActive: model.isPreparing)
                 }
                 .disabled(model.segments.isEmpty)
+                .accessibilityIdentifier("playPause")
 
                 Button { model.playNext() } label: {
                     Image(systemName: "forward.end.fill")
                 }
                 .disabled(model.segments.isEmpty)
+                .accessibilityIdentifier("next")
             }
             .font(.title2)
 
@@ -99,6 +121,7 @@ struct ReaderView: View {
                 Text("Trecho \(index + 1) de \(model.segments.count)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("segmentCounter")
             }
         }
         .padding(.vertical, 10)

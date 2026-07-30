@@ -19,6 +19,28 @@ final class ReaderModel {
     var autoAdvance = true
     var rate: Float = 0.5 { didSet { rebuildPipeline() } }
 
+    /// Vozes instaladas para o idioma do documento.
+    private(set) var availableVoices: [VoiceOption] = []
+    /// Nulo = a melhor voz disponível para o idioma.
+    var selectedVoiceIdentifier: String? {
+        didSet {
+            guard selectedVoiceIdentifier != oldValue else { return }
+            // O áudio em cache é de outra voz; recomeça o trecho atual com a nova.
+            player.stop()
+            if let index = currentIndex { play(index: index) }
+        }
+    }
+
+    var selectedVoice: VoiceOption? {
+        selectedVoiceIdentifier.flatMap(VoiceCatalog.voice(withIdentifier:))
+            ?? availableVoices.first
+    }
+
+    /// Todas as vozes do idioma são `compact`? Então vale sugerir o download.
+    var shouldSuggestBetterVoice: Bool {
+        !availableVoices.isEmpty && !VoiceCatalog.hasHighQualityVoice(for: documentLanguage)
+    }
+
     let player = SegmentPlayer()
 
     private let segmenter = DocumentSegmenter()
@@ -57,6 +79,8 @@ final class ReaderModel {
         documentTitle = url.deletingPathExtension().lastPathComponent
         documentLanguage = segmenter.documentLanguage(of: document)
         segments = segmenter.segments(of: document, documentLanguage: documentLanguage)
+        availableVoices = VoiceCatalog.voices(for: documentLanguage)
+        selectedVoiceIdentifier = availableVoices.first?.identifier
         currentIndex = nil
         player.stop()
 
@@ -115,7 +139,9 @@ final class ReaderModel {
 
             do {
                 let cached = try await pipeline.prepare(
-                    ReadingSegment(text: segment.text, language: segment.language))
+                    ReadingSegment(text: segment.text,
+                                   language: segment.language,
+                                   voiceIdentifier: selectedVoiceIdentifier))
 
                 guard currentIndex == index else { return }   // o usuário tocou em outro
                 player.play(url: cached.audioURL, alignment: snapshot(of: cached.alignment))
@@ -128,7 +154,9 @@ final class ReaderModel {
             // Gerar o próximo custa ~4% da duração do atual, então cabe folgado.
             let upcoming = ((index + 1)...(index + 2))
                 .filter { segments.indices.contains($0) }
-                .map { ReadingSegment(text: segments[$0].text, language: segments[$0].language) }
+                .map { ReadingSegment(text: segments[$0].text,
+                                      language: segments[$0].language,
+                                      voiceIdentifier: selectedVoiceIdentifier) }
             await pipeline.prefetch(upcoming)
         }
     }

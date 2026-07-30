@@ -19,7 +19,8 @@ private final class FakeSynthesizer: SegmentSynthesizing, @unchecked Sendable {
 
     func voiceIdentifier(for language: String) -> String? { "fake.voice.\(language)" }
 
-    func synthesize(text: String, language: String, rate: Float) async throws -> SynthesizedSegment {
+    func synthesize(text: String, language: String, rate: Float,
+                    voiceIdentifier: String?) async throws -> SynthesizedSegment {
         record(text)
         if delay > .zero { try await Task.sleep(for: delay) }
         if failOn.contains(text) { throw SynthesisError.producedNoAudio }

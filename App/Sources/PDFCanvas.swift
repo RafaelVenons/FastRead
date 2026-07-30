@@ -29,6 +29,8 @@ struct PDFCanvas: UIViewRepresentable {
         view.displayDirection = .vertical
         view.usePageViewController(false)
         view.backgroundColor = .secondarySystemBackground
+        view.isAccessibilityElement = true
+        view.accessibilityIdentifier = "pdfCanvas"
 
         let tap = UITapGestureRecognizer(target: context.coordinator,
                                          action: #selector(Coordinator.handleTap(_:)))

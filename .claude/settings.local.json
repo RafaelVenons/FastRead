@@ -43,7 +43,9 @@
       "Bash(swift selprobe.swift)",
       "Bash(swift mapprobe.swift)",
       "Bash(swift lineprobe.swift)",
-      "Bash(xargs -I{} echo \"FastRead em execucao: {}\")"
+      "Bash(xargs -I{} echo \"FastRead em execucao: {}\")",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' build-for-testing)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' test-without-building)"
     ]
   }
 }
