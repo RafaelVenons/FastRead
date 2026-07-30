@@ -40,4 +40,6 @@ targets:
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         # Reprodução continua com a tela bloqueada, como um audiobook.
         INFOPLIST_KEY_UIBackgroundModes: audio
-        CODE_SIGNING_ALLOWED: NO
+        # Assinatura automática para instalar no iPad Air 5. O simulador ignora isto.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: J5YKV9K4P8

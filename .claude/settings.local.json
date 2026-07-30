@@ -27,7 +27,14 @@
       "Bash(swift pdfprobe.swift)",
       "Bash(xcodegen generate *)",
       "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -quiet build)",
-      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' build)"
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' build)",
+      "Bash(xcrun devicectl *)",
+      "Bash(system_profiler SPUSBDataType)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'generic/platform=iOS' -quiet build)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(security find-certificate *)",
+      "Bash(openssl x509 *)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'generic/platform=iOS' -allowProvisioningUpdates build)"
     ]
   }
 }
