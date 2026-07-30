@@ -19,6 +19,34 @@ struct TextSegmenterTests {
         #expect(segs[1].hasPrefix("Segundo"))
     }
 
+    /// Medido: o PDFKit devolve `\n` simples mesmo onde o original tinha linha em branco.
+    /// Confiar só em `\n\n` faria o documento inteiro virar um único segmento.
+    @Test("quebra de linha após pontuação final encerra o segmento")
+    func quebraAposPontuacao() {
+        let s = TextSegmenter()
+        let extraidoDoPDF = "The reader highlights every word while the voice moves through the paragraph.\nA second paragraph follows with more content to read aloud."
+        let segs = s.segments(from: extraidoDoPDF)
+
+        #expect(segs.count == 2)
+        #expect(segs[0].hasSuffix("paragraph."))
+        #expect(segs[1].hasPrefix("A second"))
+    }
+
+    @Test("quebra de linha sem pontuação continua o mesmo segmento")
+    func quebraSemPontuacaoContinua() {
+        let s = TextSegmenter()
+        let segs = s.segments(from: "uma frase que segue\nna linha de baixo sem parar.")
+        #expect(segs.count == 1)
+        #expect(segs[0] == "uma frase que segue na linha de baixo sem parar.")
+    }
+
+    @Test("pontuação seguida de aspas ou parêntese também encerra")
+    func pontuacaoComFechamento() {
+        let s = TextSegmenter()
+        let segs = s.segments(from: "Ele disse que era \"o melhor livro.\"\nOutro parágrafo começa aqui.")
+        #expect(segs.count == 2)
+    }
+
     @Test("une as quebras de linha internas do PDF")
     func uneLinhasQuebradas() {
         let s = TextSegmenter()

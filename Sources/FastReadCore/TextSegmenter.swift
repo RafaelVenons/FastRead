@@ -53,47 +53,20 @@ public struct TextSegmenter: Sendable {
         mappedSegments(from: rawText).map(\.text)
     }
 
+    /// Percorre o texto uma única vez, decidindo em cada quebra de linha se ela encerra
+    /// um trecho ou apenas continua o anterior.
+    ///
+    /// - Important: o PDFKit **colapsa linhas em branco**: um `\n\n` do documento
+    ///   original chega aqui como `\n` simples (verificado gerando e reextraindo um PDF).
+    ///   Por isso o limite de parágrafo não pode depender de linha em branco — se
+    ///   dependesse, o documento inteiro viraria um segmento só.
     public func mappedSegments(from rawText: String) -> [MappedSegment] {
         let source = rawText as NSString
-        return paragraphRanges(in: source)
-            .map { normalize(source, in: $0) }
-            .filter { isSpeakable($0.text) }
-            .flatMap(split(paragraph:))
-    }
+        var segments: [MappedSegment] = []
 
-    // MARK: - Parágrafos
-
-    /// Linha em branco é o único indício confiável de parágrafo em texto de PDF.
-    private func paragraphRanges(in source: NSString) -> [NSRange] {
-        let separators = try? NSRegularExpression(pattern: "\\n[ \\t]*\\n[ \\t\\n]*")
-        let full = NSRange(location: 0, length: source.length)
-        guard let separators else { return [full] }
-
-        var ranges: [NSRange] = []
-        var cursor = 0
-        for match in separators.matches(in: source as String, range: full) {
-            if match.range.location > cursor {
-                ranges.append(NSRange(location: cursor, length: match.range.location - cursor))
-            }
-            cursor = NSMaxRange(match.range)
-        }
-        if cursor < source.length {
-            ranges.append(NSRange(location: cursor, length: source.length - cursor))
-        }
-        return ranges
-    }
-
-    // MARK: - Normalização com rastreamento de origem
-
-    /// Junta as linhas do parágrafo numa frase contínua, registrando a origem de cada
-    /// caractere emitido.
-    private func normalize(_ source: NSString, in range: NSRange) -> MappedSegment {
         var text = String.UnicodeScalarView()
         var indices: [Int] = []
-        indices.reserveCapacity(range.length)
-
-        var i = range.location
-        let end = NSMaxRange(range)
+        indices.reserveCapacity(source.length)
 
         func emit(_ unit: unichar, from origin: Int) {
             guard let scalar = Unicode.Scalar(unit) else { return }
@@ -101,37 +74,58 @@ public struct TextSegmenter: Sendable {
             indices.append(origin)
         }
 
-        func lastIsSpace() -> Bool { text.last == " " }
+        func flush() {
+            while text.last == " ", !indices.isEmpty {
+                text.removeLast()
+                indices.removeLast()
+            }
+            let candidate = MappedSegment(text: String(text), sourceIndices: indices)
+            if isSpeakable(candidate.text) { segments.append(candidate) }
+            text = String.UnicodeScalarView()
+            indices = []
+        }
 
-        while i < end {
+        var i = 0
+        while i < source.length {
             let c = source.character(at: i)
 
             // espaço horizontal: colapsa a corrida inteira num único separador
             if c == 0x20 || c == 0x09 {
                 let origin = i
-                while i < end, source.character(at: i) == 0x20 || source.character(at: i) == 0x09 { i += 1 }
-                if !text.isEmpty && !lastIsSpace() { emit(0x20, from: origin) }
+                while i < source.length,
+                      source.character(at: i) == 0x20 || source.character(at: i) == 0x09 { i += 1 }
+                if !text.isEmpty, text.last != " " { emit(0x20, from: origin) }
                 continue
             }
 
-            // quebra de linha dentro do parágrafo
             if c == 0x0A || c == 0x0D {
                 let origin = i
-                while i < end, [0x0A, 0x0D, 0x20, 0x09].contains(source.character(at: i)) { i += 1 }
-
-                let next: unichar? = i < end ? source.character(at: i) : nil
-                let nextIsLowercase = next.flatMap { Unicode.Scalar($0) }
-                    .map { Character($0).isLowercase } ?? false
+                var newlines = 0
+                while i < source.length, [0x0A, 0x0D, 0x20, 0x09].contains(source.character(at: i)) {
+                    if source.character(at: i) == 0x0A { newlines += 1 }
+                    i += 1
+                }
 
                 if text.last == "-" {
                     // Hífen no fim da linha seguido de minúscula é quebra silábica e some;
                     // seguido de maiúscula é nome composto e fica. Nos dois casos as
                     // metades se colam, sem espaço no meio.
+                    let next = i < source.length ? source.character(at: i) : nil
+                    let nextIsLowercase = next.flatMap { Unicode.Scalar($0) }
+                        .map { Character($0).isLowercase } ?? false
                     if nextIsLowercase {
                         text.removeLast()
                         indices.removeLast()
                     }
-                } else if !text.isEmpty && !lastIsSpace() {
+                    continue
+                }
+
+                // Linha em branco separa quando sobrevive; senão, pontuação final é o
+                // sinal disponível. Quebrar a mais só produz um segmento a mais — quebrar
+                // a menos gruda parágrafos distintos num áudio só.
+                if newlines >= 2 || endsSentence(text) {
+                    flush()
+                } else if !text.isEmpty, text.last != " " {
                     emit(0x20, from: origin)
                 }
                 continue
@@ -140,11 +134,21 @@ public struct TextSegmenter: Sendable {
             emit(c, from: i)
             i += 1
         }
+        flush()
 
-        // apara o separador final, se sobrou algum
-        while text.last == " " { text.removeLast(); indices.removeLast() }
+        return segments.flatMap(split(paragraph:))
+    }
 
-        return MappedSegment(text: String(text), sourceIndices: indices)
+    /// O trecho termina numa fronteira de frase, ignorando fechamentos de citação.
+    private func endsSentence(_ text: String.UnicodeScalarView) -> Bool {
+        let closing: Set<Unicode.Scalar> = ["\"", "'", ")", "]", "}", "»", "”", "’"]
+        let terminal: Set<Unicode.Scalar> = [".", "!", "?", "…"]
+
+        for scalar in text.reversed() {
+            if closing.contains(scalar) { continue }
+            return terminal.contains(scalar)
+        }
+        return false
     }
 
     /// Números de página, filetes e marcas de diagramação não devem virar áudio.
