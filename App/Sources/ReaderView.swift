@@ -14,7 +14,8 @@ struct ReaderView: View {
                 if let document = model.document {
                     PDFCanvas(document: document,
                               highlight: model.highlight,
-                              onTap: model.handleTap)
+                              onTap: model.handleTap,
+                              onHighlight: model.recordHighlight)
                     .ignoresSafeArea(edges: .bottom)
                 } else {
                     emptyState
@@ -73,6 +74,7 @@ struct ReaderView: View {
                     Text("Rápida").tag(Float(0.58))
                 }
                 Toggle("Continuar automaticamente", isOn: $model.autoAdvance)
+                Toggle("Modo diagnóstico", isOn: $model.diagnosticsEnabled)
                 Divider()
                 Text(model.cacheSizeDescription)
                 Button("Limpar cache", role: .destructive) { model.clearCache() }
@@ -85,6 +87,10 @@ struct ReaderView: View {
 
     private var controls: some View {
         VStack(spacing: 6) {
+            if model.diagnosticsEnabled, let info = model.diagnostics {
+                DiagnosticsPanel(info: info, currentWord: model.currentWordText)
+            }
+
             if !model.status.isEmpty {
                 Text(model.status)
                     .font(.caption)

@@ -17,6 +17,64 @@ final class ReaderModel {
 
     /// Continua para o próximo segmento quando o atual termina.
     var autoAdvance = true
+
+    // MARK: - Diagnóstico
+
+    /// Registro do último toque, para investigar realce e escolha de trecho.
+    struct TapDiagnostics: Equatable {
+        var page: Int
+        var characterIndex: Int
+        /// Texto da página em volta do índice resolvido — mostra onde o toque "caiu".
+        var textAtIndex: String
+        var segmentID: Int?
+        var segmentRange: String
+        /// Primeiras palavras do trecho escolhido.
+        var segmentHead: String
+        /// O que a página tem no intervalo do trecho (o que deveria acender).
+        var expectedHighlight: String
+        /// O que o PDFKit de fato selecionou.
+        var actualHighlight: String
+        var wordExpected: String
+        var wordActual: String
+    }
+
+    var diagnosticsEnabled = false
+    private(set) var diagnostics: TapDiagnostics?
+
+    /// Preenchido pelo PDFCanvas com o que realmente foi realçado.
+    func recordHighlight(segment: String?, word: String?) {
+        guard diagnosticsEnabled, var current = diagnostics else { return }
+        current.actualHighlight = String((segment ?? "—").prefix(90))
+        current.wordActual = word ?? "—"
+        diagnostics = current
+    }
+
+    private func captureDiagnostics(pageIndex: Int, characterIndex: Int, segment: DocumentSegment?) {
+        guard diagnosticsEnabled,
+              let pageText = document?.page(at: pageIndex)?.string as NSString?
+        else { return }
+
+        let around = NSRange(location: max(0, characterIndex - 15),
+                             length: min(40, max(0, pageText.length - max(0, characterIndex - 15))))
+        let contexto = around.length > 0 ? pageText.substring(with: around) : "—"
+
+        var esperado = "—"
+        if let range = segment?.pageRange, NSMaxRange(range) <= pageText.length {
+            esperado = String(pageText.substring(with: range).prefix(90))
+        }
+
+        diagnostics = TapDiagnostics(
+            page: pageIndex,
+            characterIndex: characterIndex,
+            textAtIndex: contexto.replacingOccurrences(of: "\n", with: "⏎"),
+            segmentID: segment?.id,
+            segmentRange: segment?.pageRange.map { "\($0.location)..<\(NSMaxRange($0))" } ?? "—",
+            segmentHead: String((segment?.text ?? "—").prefix(60)),
+            expectedHighlight: esperado.replacingOccurrences(of: "\n", with: "⏎"),
+            actualHighlight: "(aguardando)",
+            wordExpected: "—",
+            wordActual: "—")
+    }
     var rate: Float = 0.5 { didSet { rebuildPipeline() } }
 
     /// Vozes instaladas para o idioma do documento.
@@ -94,11 +152,12 @@ final class ReaderModel {
     func handleTap(pageIndex: Int, characterIndex: Int) {
         guard !segments.isEmpty else { return }
 
-        if let hit = segmenter.segment(in: segments,
-                                       pageIndex: pageIndex,
-                                       characterIndex: characterIndex) {
-            play(index: hit.id)
-        }
+        let hit = segmenter.segment(in: segments,
+                                    pageIndex: pageIndex,
+                                    characterIndex: characterIndex)
+        captureDiagnostics(pageIndex: pageIndex, characterIndex: characterIndex, segment: hit)
+
+        if let hit { play(index: hit.id) }
     }
 
     func togglePlayPause() {
@@ -178,6 +237,15 @@ final class ReaderModel {
         return PDFCanvas.Highlight(pageIndex: segment.pageIndex,
                                    segmentRange: segmentRange,
                                    wordRange: wordRange)
+    }
+
+    /// Palavra que o alinhamento diz estar tocando agora, no texto do trecho.
+    var currentWordText: String? {
+        guard let index = currentIndex, segments.indices.contains(index),
+              let range = player.currentWordRange else { return nil }
+        let texto = segments[index].text as NSString
+        guard NSMaxRange(range) <= texto.length else { return nil }
+        return texto.substring(with: range)
     }
 
     var currentPageIndex: Int? {

@@ -21,6 +21,8 @@ struct PDFCanvas: UIViewRepresentable {
     let document: PDFDocument
     let highlight: Highlight?
     let onTap: (_ pageIndex: Int, _ characterIndex: Int) -> Void
+    /// Reporta o que foi de fato selecionado — o modo de diagnóstico compara com o esperado.
+    var onHighlight: ((_ segment: String?, _ word: String?) -> Void)?
 
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
@@ -45,6 +47,7 @@ struct PDFCanvas: UIViewRepresentable {
     func updateUIView(_ view: PDFView, context: Context) {
         if view.document !== document { view.document = document }
         context.coordinator.onTap = onTap
+        context.coordinator.onHighlight = onHighlight
         context.coordinator.apply(highlight)
     }
 
@@ -56,6 +59,7 @@ struct PDFCanvas: UIViewRepresentable {
     final class Coordinator: NSObject {
         weak var pdfView: PDFView?
         var onTap: (_ pageIndex: Int, _ characterIndex: Int) -> Void
+        var onHighlight: ((_ segment: String?, _ word: String?) -> Void)?
         private var applied: Highlight?
 
         init(onTap: @escaping (_ pageIndex: Int, _ characterIndex: Int) -> Void) {
@@ -93,16 +97,21 @@ struct PDFCanvas: UIViewRepresentable {
             }
 
             var selections: [PDFSelection] = []
-            if let segment = PageTextLocator.selection(on: page, matching: highlight.segmentRange, in: pageText) {
+            let segment = PageTextLocator.selection(on: page, matching: highlight.segmentRange, in: pageText)
+            if let segment {
                 segment.color = UIColor.systemYellow.withAlphaComponent(0.22)
                 selections.append(segment)
             }
-            if let wordRange = highlight.wordRange,
-               let word = PageTextLocator.selection(on: page, matching: wordRange, in: pageText) {
-                word.color = UIColor.systemYellow.withAlphaComponent(0.75)
-                selections.append(word)
+            var word: PDFSelection?
+            if let wordRange = highlight.wordRange {
+                word = PageTextLocator.selection(on: page, matching: wordRange, in: pageText)
+                if let word {
+                    word.color = UIColor.systemYellow.withAlphaComponent(0.75)
+                    selections.append(word)
+                }
             }
             pdfView.highlightedSelections = selections.isEmpty ? nil : selections
+            onHighlight?(segment?.string, word?.string)
         }
     }
 }
