@@ -96,7 +96,63 @@ public struct DocumentSegmenter: Sendable {
                 }
             }
         }
+        return stitchHyphenated(result)
+    }
+
+    /// Costura trechos cuja última palavra ficou partida.
+    ///
+    /// A regra de linha do analisador resolve a hifenização dentro de um bloco, mas não
+    /// quando o hífen cai na última linha dele — fim de coluna, fim de página. Sem esta
+    /// costura a voz lê "relia-" e o trecho seguinte começa em "bility".
+    private func stitchHyphenated(_ segments: [DocumentSegment]) -> [DocumentSegment] {
+        var result: [DocumentSegment] = []
+
+        for segment in segments {
+            guard let previous = result.last,
+                  endsHyphenated(previous.text),
+                  previous.pageIndex == segment.pageIndex,
+                  let joined = join(previous, segment)
+            else {
+                result.append(DocumentSegment(id: result.count,
+                                              pageIndex: segment.pageIndex,
+                                              segment: segment.segment,
+                                              language: segment.language))
+                continue
+            }
+            result[result.count - 1] = joined
+        }
         return result
+    }
+
+    private func endsHyphenated(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasSuffix("-"), trimmed.count > 1 else { return false }
+        return trimmed.dropLast().last?.isLetter == true
+    }
+
+    /// Junta dois trechos removendo o hífen de quebra, mantendo o mapa de índices.
+    private func join(_ first: DocumentSegment, _ second: DocumentSegment) -> DocumentSegment? {
+        var text = first.segment.text
+        var indices = first.segment.sourceIndices
+        guard text.hasSuffix("-"), !indices.isEmpty else { return nil }
+
+        // O hífen não existe na fala; sai do texto e do mapa junto.
+        text.removeLast()
+        indices.removeLast()
+
+        // Palavra partida se cola sem espaço; caso contrário mantém a separação.
+        let continues = second.segment.text.first?.isLowercase == true
+        if !continues {
+            text += " "
+            indices.append(indices.last ?? 0)
+        }
+        text += second.segment.text
+        indices += second.segment.sourceIndices
+
+        return DocumentSegment(id: first.id,
+                               pageIndex: first.pageIndex,
+                               segment: MappedSegment(text: text, sourceIndices: indices),
+                               language: first.language)
     }
 
     /// Segmento tocado, a partir do índice de caractere na página.

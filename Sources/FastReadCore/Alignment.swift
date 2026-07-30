@@ -55,4 +55,14 @@ public struct SegmentAlignment: Codable, Sendable, Equatable {
     public func range(at time: TimeInterval) -> NSRange? {
         wordIndex(at: time).map { words[$0].range }
     }
+
+    /// Instante em que a fala alcança uma posição do texto.
+    ///
+    /// Permite começar a leitura na frase que o leitor tocou, aproveitando o áudio do
+    /// trecho inteiro que já está em cache — sem sintetizar nada de novo.
+    public func time(atTextIndex index: Int) -> TimeInterval? {
+        guard !words.isEmpty else { return nil }
+        guard let word = words.last(where: { $0.location <= index }) else { return words[0].start }
+        return word.start
+    }
 }

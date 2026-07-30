@@ -55,7 +55,8 @@
       "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test --filter \"aberturaNaoViraTrechoUnico\")",
       "Bash(sort -t' ' -k7 -rn)",
       "Bash(python3 -)",
-      "Bash(xargs -I{} echo \"menções à suíte: {}\")"
+      "Bash(xargs -I{} echo \"menções à suíte: {}\")",
+      "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test)"
     ]
   }
 }

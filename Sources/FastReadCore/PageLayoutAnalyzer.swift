@@ -56,11 +56,13 @@ public enum PageLayoutAnalyzer {
         let heights = lines.map(\.frame.height).sorted()
         let bodyHeight = heights[heights.count / 2]
 
+        let text = page.string as NSString? ?? ""
         var blocks: [LayoutBlock] = []
         var current: [PageLine] = [lines[0]]
 
         for (previous, line) in zip(lines, lines.dropFirst()) {
-            if startsNewBlock(previous: previous, line: line, bodyHeight: bodyHeight) {
+            if startsNewBlock(previous: previous, line: line,
+                              bodyHeight: bodyHeight, text: text) {
                 blocks.append(makeBlock(current))
                 current = [line]
             } else {
@@ -73,7 +75,26 @@ public enum PageLayoutAnalyzer {
 
     // MARK: - Regras de quebra
 
-    private static func startsNewBlock(previous: PageLine, line: PageLine, bodyHeight: CGFloat) -> Bool {
+    static func startsNewBlock(previous: PageLine, line: PageLine,
+                               bodyHeight: CGFloat, text: NSString) -> Bool {
+        // Palavra partida pelo diagramador amarra as duas linhas, inclusive através da
+        // troca de coluna: separar aqui deixaria um trecho terminando em "relia-" e o
+        // seguinte começando em "bility", que é como o leitor via o texto quebrar.
+        if endsHyphenated(previous, in: text) { return false }
+
+        return breaksLayout(previous: previous, line: line, bodyHeight: bodyHeight)
+    }
+
+    /// A linha termina com hífen de quebra silábica?
+    private static func endsHyphenated(_ line: PageLine, in text: NSString) -> Bool {
+        guard NSMaxRange(line.range) <= text.length, line.range.length > 0 else { return false }
+        let content = text.substring(with: line.range).trimmingCharacters(in: .whitespaces)
+        guard content.hasSuffix("-") else { return false }
+        // "-" isolado é travessão ou marcador de lista, não palavra partida.
+        return content.count > 1 && content.dropLast().last?.isLetter == true
+    }
+
+    private static func breaksLayout(previous: PageLine, line: PageLine, bodyHeight: CGFloat) -> Bool {
         // Colunas diferentes: um salto horizontal grande com a linha subindo de volta ao
         // topo é troca de coluna, não continuação.
         if line.frame.minY > previous.frame.minY + bodyHeight { return true }

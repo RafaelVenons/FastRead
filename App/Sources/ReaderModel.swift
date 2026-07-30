@@ -157,7 +157,11 @@ final class ReaderModel {
                                     characterIndex: characterIndex)
         captureDiagnostics(pageIndex: pageIndex, characterIndex: characterIndex, segment: hit)
 
-        if let hit { play(index: hit.id) }
+        // Toca a partir de onde o dedo caiu, não do início do trecho: num parágrafo longo
+        // recomeçar do topo a cada toque impede voltar a um ponto específico.
+        if let hit {
+            play(index: hit.id, fromPageIndex: characterIndex)
+        }
     }
 
     func togglePlayPause() {
@@ -184,10 +188,13 @@ final class ReaderModel {
         play(index: current - 1)
     }
 
-    func play(index: Int) {
+    func play(index: Int, fromPageIndex pageCharacterIndex: Int? = nil) {
         guard segments.indices.contains(index) else { return }
         let segment = segments[index]
         currentIndex = index
+
+        // Posição dentro do trecho onde a leitura deve começar.
+        let startAt = pageCharacterIndex.flatMap { segment.segment.normalizedIndex(forSource: $0) }
 
         Task { [pipeline] in
             // Já passou do trecho antigo: o que estava sendo pré-gerado não serve mais.
@@ -203,7 +210,10 @@ final class ReaderModel {
                                    voiceIdentifier: selectedVoiceIdentifier))
 
                 guard currentIndex == index else { return }   // o usuário tocou em outro
-                player.play(url: cached.audioURL, alignment: snapshot(of: cached.alignment))
+                let startTime = startAt.flatMap { cached.alignment.time(atTextIndex: $0) } ?? 0
+                player.play(url: cached.audioURL,
+                            alignment: snapshot(of: cached.alignment),
+                            from: startTime)
                 status = ""
             } catch {
                 status = "Não consegui sintetizar esse trecho."

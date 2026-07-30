@@ -17,6 +17,27 @@ public struct MappedSegment: Sendable, Equatable {
         self.sourceIndices = sourceIndices
     }
 
+    /// Posição no texto normalizado que corresponde a um índice da página.
+    ///
+    /// Caminho inverso do realce: serve para começar a leitura onde o dedo tocou, em vez
+    /// de sempre do início do trecho. Índices sem correspondência exata — o hífen que
+    /// sumiu, a quebra de linha virada espaço — resolvem para o caractere mais próximo.
+    public func normalizedIndex(forSource sourceIndex: Int) -> Int? {
+        guard !sourceIndices.isEmpty else { return nil }
+
+        var best: Int?
+        var bestDistance = Int.max
+        for (normalized, source) in sourceIndices.enumerated() {
+            let distance = abs(source - sourceIndex)
+            if distance < bestDistance {
+                bestDistance = distance
+                best = normalized
+            }
+            if distance == 0 { break }
+        }
+        return best
+    }
+
     /// Converte um range do texto normalizado no range correspondente da página.
     public func sourceRange(for range: NSRange) -> NSRange? {
         guard range.location != NSNotFound,

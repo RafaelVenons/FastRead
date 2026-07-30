@@ -41,7 +41,7 @@ final class SegmentPlayer {
         }
     }
 
-    func play(url: URL, alignment: SegmentAlignmentSnapshot) {
+    func play(url: URL, alignment: SegmentAlignmentSnapshot, from startTime: TimeInterval = 0) {
         stop()
 
         guard let player = try? AVAudioPlayer(contentsOf: url) else { return }
@@ -49,6 +49,10 @@ final class SegmentPlayer {
         self.alignment = alignment
 
         player.prepareToPlay()
+        // Começar onde o leitor tocou aproveita o áudio do trecho inteiro já em cache.
+        if startTime > 0, startTime < alignment.duration {
+            player.currentTime = startTime
+        }
         player.play()
         isPlaying = true
 

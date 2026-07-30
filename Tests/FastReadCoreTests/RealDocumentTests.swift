@@ -57,6 +57,39 @@ struct RealDocumentTests {
         #expect(analisados > 0, "nenhum PDF com texto utilizável")
     }
 
+    /// Nos artigos medidos, 15 de 89 linhas de uma página terminam com hífen. Um trecho
+    /// que termine assim significa que a palavra foi partida entre dois trechos — a voz
+    /// lê "relia-" e o trecho seguinte começa em "bility".
+    @Test("nenhum trecho termina com palavra partida")
+    func nenhumTrechoTerminaEmHifen() throws {
+        let arquivos = SamplePDFs.files
+        let segmenter = DocumentSegmenter()
+        var partidos: [String] = []
+        var analisados = 0
+
+        for arquivo in arquivos.prefix(12) {
+            guard let doc = PDFDocument(url: arquivo) else { continue }
+            let segs = segmenter.segments(of: doc, documentLanguage: "en")
+
+            // O último trecho de uma página pode terminar partido de forma legítima: a
+            // continuação está na página seguinte, e juntá-las faria um trecho com texto
+            // de duas páginas — o realce só sabe pintar uma.
+            let ultimoDeCadaPagina = Set(Dictionary(grouping: segs, by: \.pageIndex)
+                .compactMap { $0.value.last?.id })
+
+            for seg in segs where !ultimoDeCadaPagina.contains(seg.id) {
+                analisados += 1
+                let fim = seg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard fim.hasSuffix("-"), fim.count > 1,
+                      fim.dropLast().last?.isLetter == true else { continue }
+                partidos.append("\(arquivo.lastPathComponent) #\(seg.id): ...\(fim.suffix(28))")
+            }
+        }
+
+        #expect(analisados > 50, "poucos trechos analisados: \(analisados)")
+        #expect(partidos.isEmpty, "\(partidos.count) trechos partidos: \(partidos.prefix(4))")
+    }
+
     @Test("tocar no corpo não resolve para o cabeçalho")
     func toqueNoCorpoNaoVaiParaCabecalho() throws {
         let arquivos = SamplePDFs.files
