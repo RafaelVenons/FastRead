@@ -212,6 +212,124 @@ struct PageTextLocatorTests {
         #expect(verificadas > 20, "poucas amostras verificadas: \(verificadas)")
     }
 
+    /// Layout de duas colunas com cabeçalho de largura total — o formato do artigo que
+    /// o usuário estava lendo.
+    private func makeTwoColumnPage() throws -> PDFPage {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("col-\(UUID().uuidString).pdf")
+        var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let ctx = CGContext(url as CFURL, mediaBox: &box, nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        let font = CTFontCreateWithName("Helvetica" as CFString, 10, nil)
+        func draw(_ text: String, _ rect: CGRect) {
+            let attr = NSAttributedString(string: text, attributes: [.font: font])
+            CTFrameDraw(CTFramesetterCreateFrame(
+                CTFramesetterCreateWithAttributedString(attr),
+                CFRange(location: 0, length: 0),
+                CGPath(rect: rect, transform: nil), nil), ctx)
+        }
+        ctx.beginPDFPage(nil)
+        draw("Journal of Document Engineering, Vol. 12, No. 3, 2026, pp. 45-67.",
+             CGRect(x: 48, y: 730, width: 516, height: 30))
+        draw("""
+        LEFT-A First paragraph of the left column discusses the alignment problem in detail here.
+
+        LEFT-B Second paragraph of the left column continues the discussion with more content.
+        """, CGRect(x: 48, y: 400, width: 240, height: 320))
+        draw("""
+        RIGHT-A First paragraph of the right column presents the evaluation of our method.
+
+        RIGHT-B Second paragraph of the right column reports the results we obtained.
+        """, CGRect(x: 320, y: 400, width: 240, height: 320))
+        ctx.endPDFPage()
+        ctx.closePDF()
+
+        guard let page = PDFDocument(url: url)?.page(at: 0) else { throw CocoaError(.fileReadUnknown) }
+        return page
+    }
+
+    /// Bug relatado: o realce ia "até a primeira palavra depois do ponto", acendendo
+    /// texto que a voz não lia.
+    @Test("realce não invade o parágrafo seguinte")
+    func realceNaoInvadeProximoParagrafo() throws {
+        let page = try makeTwoColumnPage()
+        let texto = try #require(page.string) as NSString
+
+        for alvo in ["LEFT-A First paragraph of the left column discusses\nthe alignment problem in detail here.",
+                     "RIGHT-A First paragraph of the right column presents\nthe evaluation of our method.",
+                     "Journal of Document Engineering, Vol. 12, No. 3, 2026, pp. 45-67."] {
+            let range = texto.range(of: alvo)
+            guard range.location != NSNotFound else { continue }
+
+            let obtido = try #require(PageTextLocator.selection(on: page, matching: range, in: texto)?.string)
+            let semQuebras = obtido.replacingOccurrences(of: "\n", with: " ")
+            let esperado = alvo.replacingOccurrences(of: "\n", with: " ")
+
+            #expect(semQuebras == esperado,
+                    "sobrou \(semQuebras.dropFirst(esperado.count).debugDescription)")
+        }
+    }
+
+    @Test("realce de uma coluna não pega texto da outra")
+    func realceNaoAtravessaColunas() throws {
+        let page = try makeTwoColumnPage()
+        let texto = try #require(page.string) as NSString
+        let range = texto.range(of: "LEFT-B Second paragraph of the left column")
+        guard range.location != NSNotFound else { return }
+
+        let obtido = try #require(PageTextLocator.selection(on: page, matching: range, in: texto)?.string)
+        #expect(obtido.contains("RIGHT") == false, "vazou para a coluna direita")
+    }
+
+    @Test("toque em cada coluna resolve para a coluna certa")
+    func toqueRespeitaColuna() throws {
+        let page = try makeTwoColumnPage()
+        let texto = try #require(page.string) as NSString
+
+        for marca in ["LEFT-A", "LEFT-B", "RIGHT-A", "RIGHT-B"] {
+            let range = texto.range(of: marca)
+            guard range.location != NSNotFound else { continue }
+
+            let bounds = try #require(PageTextLocator.selection(on: page, matching: range, in: texto)?
+                .bounds(for: page))
+            let indice = try #require(PageTextLocator.characterIndex(
+                on: page, at: CGPoint(x: bounds.midX, y: bounds.midY), in: texto))
+
+            #expect(NSLocationInRange(indice, range),
+                    "\(marca): toque resolveu para \(indice), esperado dentro de \(range)")
+        }
+    }
+
+    /// O toque do usuário raramente acerta um glifo: cai na entrelinha, na margem
+    /// interna, no recuo do parágrafo. Em duas colunas isso é perigoso, porque na mesma
+    /// altura existe texto da outra coluna — e ele pertence a outra parte do documento.
+    @Test("toque fora de glifo não pula para a outra coluna")
+    func toqueForaDeGlifoNaoTrocaDeColuna() throws {
+        let page = try makeTwoColumnPage()
+        let texto = try #require(page.string) as NSString
+
+        let direita = texto.range(of: "RIGHT-A")
+        let esquerda = texto.range(of: "LEFT-A")
+        let boundsDireita = try #require(PageTextLocator.selection(on: page, matching: direita, in: texto)?
+            .bounds(for: page))
+
+        // logo à esquerda do início da coluna direita — no vão entre as colunas,
+        // exatamente na altura em que a coluna esquerda também tem texto
+        let noVao = CGPoint(x: boundsDireita.minX - 12, y: boundsDireita.midY)
+        #expect(page.characterIndex(at: noVao) == NSNotFound, "premissa: está fora de um glifo")
+
+        let indice = try #require(PageTextLocator.characterIndex(on: page, at: noVao, in: texto))
+        #expect(indice > esquerda.location,
+                "caiu no começo da coluna esquerda (\(indice)) em vez da direita")
+
+        // e um toque logo acima da primeira linha da coluna direita, no recuo
+        let acima = CGPoint(x: boundsDireita.midX, y: boundsDireita.maxY + 4)
+        let indiceAcima = try #require(PageTextLocator.characterIndex(on: page, at: acima, in: texto))
+        #expect(indiceAcima >= direita.location - 4,
+                "toque acima da coluna direita resolveu para \(indiceAcima)")
+    }
+
     @Test("página sem texto não resolve toque")
     func paginaVazia() throws {
         let page = try makePage(" ")

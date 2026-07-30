@@ -36,13 +36,27 @@ public enum PageTextLocator {
         for delta in probes {
             let start = estimate + delta
             guard start >= 0, start + range.length <= page.numberOfCharacters else { continue }
-            guard let candidate = selection(on: page, boundsStart: start, length: range.length) else { continue }
 
-            if sameText(candidate.string, expected) { return candidate }
-            if fallback == nil { fallback = candidate }
+            // Onde encostar o ponto final depende do que vem logo depois do trecho:
+            // no fim do último glifo o PDFKit às vezes engole o caractere seguinte, no
+            // começo dele às vezes corta o último. Testar os dois e conferir o texto sai
+            // mais barato do que tentar prever qual vale em cada caso.
+            for edge in SelectionEdge.allCases {
+                guard let candidate = selection(on: page, boundsStart: start,
+                                                length: range.length, edge: edge) else { continue }
+                if sameText(candidate.string, expected) { return candidate }
+                if fallback == nil { fallback = candidate }
+            }
         }
         // Melhor um realce ligeiramente torto do que nenhum.
         return fallback
+    }
+
+    private enum SelectionEdge: CaseIterable {
+        /// Encosta no começo do último glifo — não invade o caractere seguinte.
+        case leading
+        /// Encosta no fim do último glifo — garante incluir o último caractere.
+        case trailing
     }
 
     /// Compara ignorando espaçamento.
@@ -73,13 +87,19 @@ public enum PageTextLocator {
         return stringIndex - breaks
     }
 
-    private static func selection(on page: PDFPage, boundsStart: Int, length: Int) -> PDFSelection? {
+    private static func selection(on page: PDFPage, boundsStart: Int, length: Int,
+                                  edge: SelectionEdge) -> PDFSelection? {
         let first = page.characterBounds(at: boundsStart)
         let last = page.characterBounds(at: boundsStart + length - 1)
         guard !first.isNull, !last.isNull else { return nil }
 
+        let end = switch edge {
+        case .leading: last.minX + min(1, last.width * 0.5)
+        case .trailing: last.maxX
+        }
+
         return page.selection(from: CGPoint(x: first.minX, y: first.midY),
-                              to: CGPoint(x: last.maxX, y: last.midY))
+                              to: CGPoint(x: end, y: last.midY))
     }
 
     // MARK: - Toque → texto
@@ -113,7 +133,8 @@ public enum PageTextLocator {
 
         let anchorLength = min(16, page.numberOfCharacters - boundsIndex)
         guard anchorLength > 2,
-              let read = selection(on: page, boundsStart: boundsIndex, length: anchorLength)?.string
+              let read = selection(on: page, boundsStart: boundsIndex,
+                                   length: anchorLength, edge: .trailing)?.string
         else { return estimate }
 
         // Só até o primeiro espaço: uma palavra não tem espaçamento interno para divergir.
