@@ -7,6 +7,18 @@ public struct PageLine: Sendable, Equatable {
     /// Intervalo em `page.string`.
     public let range: NSRange
     public let frame: CGRect
+    /// Altura típica dos glifos da linha — a mediana, não a do retângulo que envolve tudo.
+    ///
+    /// O retângulo da linha inteira não serve para comparar corpo de letra: medido num
+    /// artigo, duas linhas do mesmo parágrafo tinham 21,1 e 42,5 de altura de caixa,
+    /// razão 2,0, o que fazia a última linha parecer um título e ser separada do resto.
+    public let typicalHeight: CGFloat
+
+    public init(range: NSRange, frame: CGRect, typicalHeight: CGFloat? = nil) {
+        self.range = range
+        self.frame = frame
+        self.typicalHeight = typicalHeight ?? frame.height
+    }
 }
 
 /// Um conjunto de linhas que formam uma unidade visual — um parágrafo, um título,
@@ -38,8 +50,9 @@ public enum PageLayoutAnalyzer {
             guard isBreak else { continue }
 
             let range = NSRange(location: start, length: i - start)
-            if range.length > 0, let frame = frame(of: range, on: page, in: text) {
-                result.append(PageLine(range: range, frame: frame))
+            if range.length > 0, let measured = measure(range, on: page, in: text) {
+                result.append(PageLine(range: range, frame: measured.frame,
+                                       typicalHeight: measured.typicalHeight))
             }
             start = i + 1
         }
@@ -53,7 +66,7 @@ public enum PageLayoutAnalyzer {
 
         // A altura mediana representa o corpo do texto, que domina a página; usá-la como
         // referência evita que um título grande distorça os limiares.
-        let heights = lines.map(\.frame.height).sorted()
+        let heights = lines.map(\.typicalHeight).sorted()
         let bodyHeight = heights[heights.count / 2]
 
         let text = page.string as NSString? ?? ""
@@ -97,7 +110,7 @@ public enum PageLayoutAnalyzer {
     }
 
     private static func changesTypeSize(previous: PageLine, line: PageLine) -> Bool {
-        let ratio = line.frame.height / max(previous.frame.height, 0.01)
+        let ratio = line.typicalHeight / max(previous.typicalHeight, 0.01)
         return ratio > 1.25 || ratio < 0.8
     }
 
@@ -155,18 +168,28 @@ public enum PageLayoutAnalyzer {
 
     // MARK: - Geometria
 
-    /// Retângulo que cobre um intervalo de `page.string`.
-    private static func frame(of range: NSRange, on page: PDFPage, in text: NSString) -> CGRect? {
+    /// Caixa que cobre um intervalo de `page.string` e a altura típica dos seus glifos.
+    ///
+    /// A mediana ignora o glifo esticado ocasional que inflaria a caixa e faria a linha
+    /// passar por outro corpo de letra.
+    private static func measure(_ range: NSRange, on page: PDFPage,
+                                in text: NSString) -> (frame: CGRect, typicalHeight: CGFloat)? {
         let start = PageTextLocator.boundsIndex(for: range.location, in: text)
         let end = PageTextLocator.boundsIndex(for: NSMaxRange(range) - 1, in: text)
         guard start >= 0, end >= start, end < page.numberOfCharacters else { return nil }
 
-        var result: CGRect?
+        var box: CGRect?
+        var heights: [CGFloat] = []
         for i in start...end {
             let rect = page.characterBounds(at: i)
             guard !rect.isNull, rect.width > 0 || rect.height > 0 else { continue }
-            result = result.map { $0.union(rect) } ?? rect
+            box = box.map { $0.union(rect) } ?? rect
+            if rect.height > 0 { heights.append(rect.height) }
         }
-        return result
+        guard let box else { return nil }
+
+        heights.sort()
+        let typical = heights.isEmpty ? box.height : heights[heights.count / 2]
+        return (box, typical)
     }
 }

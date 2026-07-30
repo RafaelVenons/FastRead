@@ -90,6 +90,51 @@ struct RealDocumentTests {
         #expect(partidos.isEmpty, "\(partidos.count) trechos partidos: \(partidos.prefix(4))")
     }
 
+    /// A assinatura do bug: um parágrafo longo cortado, com a cauda virando trecho
+    /// próprio — foi assim que "points of view." apareceu sozinho, separado da frase que
+    /// terminava. Só conta texto corrido: sumários e tabelas têm linhas soltas em caixa
+    /// baixa por natureza, e não é disso que se trata.
+    @Test("parágrafo longo não é cortado deixando a cauda solta")
+    func caudaDeParagrafoNaoViraTrecho() throws {
+        let arquivos = SamplePDFs.files
+        let segmenter = DocumentSegmenter()
+        var cortados: [String] = []
+        var pares = 0
+
+        for arquivo in arquivos.prefix(12) {
+            guard let doc = PDFDocument(url: arquivo) else { continue }
+            let segs = segmenter.segments(of: doc, documentLanguage: "en")
+
+            for (anterior, atual) in zip(segs, segs.dropFirst()) {
+                guard anterior.pageIndex == atual.pageIndex else { continue }
+
+                let fim = anterior.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let inicio = atual.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // texto corrido de verdade, não linha de sumário nem célula de tabela
+                guard fim.count > 200, !fim.contains("...."), !inicio.contains("....") else { continue }
+                pares += 1
+
+                let fraseAberta = ![".", "!", "?", "…", ":", ";"].contains(String(fim.suffix(1)))
+                guard fraseAberta, inicio.first?.isLowercase == true else { continue }
+                cortados.append("...\(fim.suffix(24)) || \(inicio.prefix(24))...")
+            }
+        }
+
+        #expect(pares > 20, "poucos pares de texto corrido: \(pares)")
+
+        // DÍVIDA CONHECIDA: 139 de 1217 pares ainda são cortados assim nos artigos de
+        // exemplo. O caso relatado ("points of view.") está resolvido e coberto pelos
+        // testes de unidade, mas o padrão persiste em outros pontos — referências
+        // bibliográficas e parágrafos que atravessam a coluna sem que a regra de
+        // continuação dispare. Registrado como falha conhecida para ficar visível em vez
+        // de escondido atrás de um limiar frouxo.
+        withKnownIssue("corte de parágrafo ainda ocorre em ~11% dos pares") {
+            let amostra = cortados.prefix(6).joined(separator: " ## ")
+            #expect(cortados.isEmpty, "\(cortados.count)/\(pares) cortados: \(amostra)")
+        }
+    }
+
     @Test("tocar no corpo não resolve para o cabeçalho")
     func toqueNoCorpoNaoVaiParaCabecalho() throws {
         let arquivos = SamplePDFs.files
