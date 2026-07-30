@@ -59,19 +59,41 @@ public struct DocumentSegmenter: Sendable {
         return detector.documentLanguage(sampling: pages, fallback: fallback)
     }
 
+    /// Quebra o documento em trechos legíveis.
+    ///
+    /// A divisão parte dos blocos visuais da página, não do texto corrido: num artigo
+    /// científico o cabeçalho da revista, o título, os autores e a afiliação são linhas
+    /// que não terminam em ponto, e sem a geometria todas se fundem num trecho só.
     public func segments(of document: PDFDocument, documentLanguage: String) -> [DocumentSegment] {
         var result: [DocumentSegment] = []
 
         for pageIndex in 0..<document.pageCount {
-            guard let text = document.page(at: pageIndex)?.string else { continue }
+            guard let page = document.page(at: pageIndex),
+                  let pageText = page.string as NSString?, pageText.length > 0 else { continue }
 
-            for mapped in segmenter.mappedSegments(from: text) {
-                let language = detector.language(forSegment: mapped.text,
-                                                 documentLanguage: documentLanguage)
-                result.append(DocumentSegment(id: result.count,
-                                              pageIndex: pageIndex,
-                                              segment: mapped,
-                                              language: language))
+            let blocks = PageLayoutAnalyzer.blocks(of: page)
+            // Página sem geometria utilizável ainda pode ser lida pelo texto puro.
+            let ranges = blocks.isEmpty
+                ? [NSRange(location: 0, length: pageText.length)]
+                : blocks.map(\.range)
+
+            for blockRange in ranges {
+                guard blockRange.length > 0, NSMaxRange(blockRange) <= pageText.length else { continue }
+                let blockText = pageText.substring(with: blockRange)
+
+                for mapped in segmenter.mappedSegments(from: blockText) {
+                    // Os índices vêm relativos ao bloco; reposiciona-os na página.
+                    let onPage = MappedSegment(
+                        text: mapped.text,
+                        sourceIndices: mapped.sourceIndices.map { $0 + blockRange.location })
+
+                    let language = detector.language(forSegment: mapped.text,
+                                                     documentLanguage: documentLanguage)
+                    result.append(DocumentSegment(id: result.count,
+                                                  pageIndex: pageIndex,
+                                                  segment: onPage,
+                                                  language: language))
+                }
             }
         }
         return result

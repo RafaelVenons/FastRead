@@ -7,3 +7,6 @@ xcuserdata/
 
 # Gerado pelo XcodeGen a partir de project.yml
 *.xcodeproj
+
+# Artigos do usuário: não são do projeto e têm direitos de terceiros
+BESS/

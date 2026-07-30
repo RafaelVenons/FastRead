@@ -48,7 +48,14 @@
       "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' test-without-building)",
       "Bash(swift twocol.swift)",
       "Bash(swift twocol2.swift)",
-      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' test)"
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' test)",
+      "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test --filter \"Documentos reais\")",
+      "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test --filter RealDocumentTests)",
+      "Bash(sed -i '' 's/#expect\\(maior < 900,/#expect\\(maior < 1,/' Tests/FastReadCoreTests/RealDocumentTests.swift)",
+      "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test --filter \"aberturaNaoViraTrechoUnico\")",
+      "Bash(sort -t' ' -k7 -rn)",
+      "Bash(python3 -)",
+      "Bash(xargs -I{} echo \"menções à suíte: {}\")"
     ]
   }
 }

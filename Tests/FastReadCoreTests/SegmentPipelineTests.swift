@@ -194,12 +194,21 @@ struct SegmentPipelineTests {
         let cache = try makeCache()
         let pipeline = SegmentPipeline(synthesizer: fake, cache: cache, rate: 0.5)
 
+        // Calibra com um segmento sozinho: um limite absoluto vira teste instável
+        // quando a máquina está carregada.
+        let inicioBase = ContinuousClock.now
+        await pipeline.prefetch([seg("base")])
+        await pipeline.waitForPendingWork()
+        let umSozinho = ContinuousClock.now - inicioBase
+
         let inicio = ContinuousClock.now
         await pipeline.prefetch([seg("um"), seg("dois"), seg("tres")])
         await pipeline.waitForPendingWork()
-        let decorrido = ContinuousClock.now - inicio
+        let tres = ContinuousClock.now - inicio
 
-        #expect(fake.callCount == 3)
-        #expect(decorrido < .milliseconds(500), "serializado levaria ~600ms")
+        #expect(fake.callCount == 4)
+        // Em paralelo os três custam perto de um; serializados custariam perto de três.
+        #expect(tres < umSozinho * 2,
+                "três em paralelo levaram \(tres) contra \(umSozinho) de um só — parece serializado")
     }
 }
