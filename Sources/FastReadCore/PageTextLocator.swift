@@ -38,11 +38,28 @@ public enum PageTextLocator {
             guard start >= 0, start + range.length <= page.numberOfCharacters else { continue }
             guard let candidate = selection(on: page, boundsStart: start, length: range.length) else { continue }
 
-            if candidate.string == expected { return candidate }
+            if sameText(candidate.string, expected) { return candidate }
             if fallback == nil { fallback = candidate }
         }
         // Melhor um realce ligeiramente torto do que nenhum.
         return fallback
+    }
+
+    /// Compara ignorando espaçamento.
+    ///
+    /// Um trecho de várias linhas nunca bate caractere a caractere: `page.string` traz as
+    /// quebras onde a seleção do PDFKit traz espaços. Comparar cru fazia a verificação
+    /// falhar sempre em parágrafos, cair no primeiro candidato e o realce "passar um
+    /// pouco" do trecho lido.
+    private static func sameText(_ candidate: String?, _ expected: String) -> Bool {
+        guard let candidate else { return false }
+        return collapsed(candidate) == collapsed(expected)
+    }
+
+    private static func collapsed(_ text: String) -> String {
+        text.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     /// Estimativa do índice de bounds: as quebras de linha de `page.string` não ocupam
@@ -79,16 +96,58 @@ public enum PageTextLocator {
 
         let direct = page.characterIndex(at: point)
         if direct != NSNotFound, direct >= 0, direct < page.numberOfCharacters {
-            return stringIndex(forBounds: direct, in: pageText)
+            return stringIndex(forBounds: direct, on: page, in: pageText)
         }
-        return nearestCharacterIndex(on: page, to: point, in: pageText)
+        guard let nearest = nearestBoundsIndex(on: page, to: point) else { return nil }
+        return stringIndex(forBounds: nearest, on: page, in: pageText)
+    }
+
+    /// Converte índice de bounds em índice de `page.string`, conferindo pelo texto.
+    ///
+    /// A estimativa por contagem de quebras erra — medido, às vezes por mais de uma
+    /// posição — e aqui não há texto esperado para comparar como em `selection`. A saída
+    /// é ler no PDF a palavra que começa naquele índice e procurá-la em volta da
+    /// estimativa: o texto lido é a única fonte confiável.
+    static func stringIndex(forBounds boundsIndex: Int, on page: PDFPage, in pageText: NSString) -> Int? {
+        let estimate = stringIndex(forBounds: boundsIndex, in: pageText)
+
+        let anchorLength = min(16, page.numberOfCharacters - boundsIndex)
+        guard anchorLength > 2,
+              let read = selection(on: page, boundsStart: boundsIndex, length: anchorLength)?.string
+        else { return estimate }
+
+        // Só até o primeiro espaço: uma palavra não tem espaçamento interno para divergir.
+        let anchor = String(read.prefix { !$0.isWhitespace })
+        guard anchor.count >= 3, let estimate else { return estimate }
+
+        let window = 200
+        let low = max(0, estimate - window)
+        let high = min(pageText.length, estimate + window)
+        guard high > low else { return estimate }
+
+        // A ocorrência MAIS PRÓXIMA da estimativa, não a primeira da janela: num artigo a
+        // mesma palavra se repete a cada parágrafo, e pegar a primeira jogava a leitura
+        // para o bloco anterior — o cabeçalho da revista, no caso relatado.
+        var cursor = low
+        var best: Int?
+        while cursor < high {
+            let found = pageText.range(of: anchor, options: [],
+                                       range: NSRange(location: cursor, length: high - cursor))
+            guard found.location != NSNotFound else { break }
+
+            if best == nil || abs(found.location - estimate) < abs(best! - estimate) {
+                best = found.location
+            }
+            cursor = found.location + 1
+        }
+        return best ?? estimate
     }
 
     /// Caractere cujo retângulo está mais perto do ponto.
     ///
     /// Percorre a página inteira, mas só quando o toque não acerta um glifo — uma vez
     /// por toque, sobre alguns milhares de caracteres.
-    private static func nearestCharacterIndex(on page: PDFPage, to point: CGPoint, in pageText: NSString) -> Int? {
+    private static func nearestBoundsIndex(on page: PDFPage, to point: CGPoint) -> Int? {
         var best: Int?
         var bestDistance = Double.greatestFiniteMagnitude
 
@@ -107,7 +166,7 @@ public enum PageTextLocator {
                 best = i
             }
         }
-        return best.flatMap { stringIndex(forBounds: $0, in: pageText) }
+        return best
     }
 
     /// Inverso de `boundsIndex(for:in:)`: reintroduz as quebras de linha puladas.

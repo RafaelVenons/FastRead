@@ -42,7 +42,8 @@
       "Bash(swift offsetprobe.swift)",
       "Bash(swift selprobe.swift)",
       "Bash(swift mapprobe.swift)",
-      "Bash(swift lineprobe.swift)"
+      "Bash(swift lineprobe.swift)",
+      "Bash(xargs -I{} echo \"FastRead em execucao: {}\")"
     ]
   }
 }

@@ -127,6 +127,91 @@ struct PageTextLocatorTests {
         #expect(indice! < texto.length)
     }
 
+    /// Bug relatado no iPad: tocar no primeiro parágrafo começava a leitura no cabeçalho
+    /// da revista. Numa página densa o erro da fórmula acumula linha a linha, até pular
+    /// para o bloco anterior.
+    @Test("índice continua exato no fim de uma página densa")
+    func precisaoEmPaginaDensa() throws {
+        let cabecalho = "Journal of Document Engineering, Vol. 12, No. 3, 2026, pp. 45-67.\n"
+        let corpo = (1...25).map {
+            "Paragraph number \($0) discusses an aspect of the alignment problem in detail."
+        }.joined(separator: "\n")
+        let page = try makePage(cabecalho + corpo)
+        let texto = try #require(page.string) as NSString
+
+        // palavras espalhadas, inclusive bem no fim da página
+        for alvo in ["Journal", "number 1 ", "number 12", "number 25"] {
+            let range = texto.range(of: alvo)
+            guard range.location != NSNotFound else { continue }
+
+            let bounds = try #require(PageTextLocator.selection(on: page, matching: range, in: texto)?
+                .bounds(for: page))
+            let indice = try #require(PageTextLocator.characterIndex(
+                on: page, at: CGPoint(x: bounds.midX, y: bounds.midY), in: texto))
+
+            #expect(NSLocationInRange(indice, range),
+                    "\(alvo.debugDescription): esperado dentro de \(range), obtido \(indice)")
+        }
+    }
+
+    /// O destaque "passava um pouco" do parágrafo: para um trecho de várias linhas o
+    /// texto da seleção difere do de `page.string` no espaçamento, a verificação sempre
+    /// falhava e caía num candidato desalinhado.
+    @Test("seleção de trecho multi-linha não extrapola o trecho")
+    func trechoMultiLinha() throws {
+        let page = try makePage(artigo)
+        let texto = try #require(page.string) as NSString
+        let range = texto.range(of: "Abstract. This paper presents a method for reading documents aloud.")
+        #expect(range.location != NSNotFound)
+
+        let selection = try #require(PageTextLocator.selection(on: page, matching: range, in: texto))
+        let obtido = selection.string ?? ""
+
+        // pode diferir em espaçamento, mas não pode invadir o parágrafo vizinho
+        #expect(obtido.contains("Abstract"))
+        #expect(obtido.contains("aloud"))
+        #expect(obtido.contains("The system") == false, "invadiu o parágrafo seguinte")
+        #expect(obtido.contains("Rafael") == false, "invadiu o bloco anterior")
+    }
+
+    /// Propriedade que não depende de reproduzir um layout específico: sair de um índice
+    /// de `page.string`, ir até a geometria e voltar tem que cair na mesma palavra.
+    /// É o que garante que o toque resolve o trecho certo em qualquer PDF.
+    @Test("ida e volta entre índice e geometria preserva a palavra")
+    func roundTripIndiceGeometria() throws {
+        let cabecalho = "Journal of Document Engineering, Vol. 12, No. 3, 2026, pp. 45-67.\n"
+        let corpo = (1...20).map {
+            "Paragraph \($0) discusses one aspect of the alignment problem in some detail."
+        }.joined(separator: "\n")
+        let page = try makePage(cabecalho + corpo)
+        let texto = try #require(page.string) as NSString
+
+        var verificadas = 0
+        for palavra in ["Journal", "Engineering", "Paragraph", "alignment", "detail"] {
+            var busca = NSRange(location: 0, length: texto.length)
+            while true {
+                let range = texto.range(of: palavra, options: [], range: busca)
+                guard range.location != NSNotFound else { break }
+                busca = NSRange(location: NSMaxRange(range),
+                                length: texto.length - NSMaxRange(range))
+
+                guard let selection = PageTextLocator.selection(on: page, matching: range, in: texto),
+                      let bounds = selection.bounds(for: page) as CGRect?, !bounds.isNull
+                else { continue }
+
+                let volta = try #require(PageTextLocator.characterIndex(
+                    on: page, at: CGPoint(x: bounds.midX, y: bounds.midY), in: texto))
+
+                // tem que cair na mesma ocorrência, não numa anterior nem no cabeçalho
+                #expect(NSLocationInRange(volta, range),
+                        "\(palavra) em \(range.location): voltou \(volta)")
+                verificadas += 1
+                if verificadas > 40 { break }
+            }
+        }
+        #expect(verificadas > 20, "poucas amostras verificadas: \(verificadas)")
+    }
+
     @Test("página sem texto não resolve toque")
     func paginaVazia() throws {
         let page = try makePage(" ")
