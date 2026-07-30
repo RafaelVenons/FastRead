@@ -78,10 +78,26 @@ public struct DocumentSegmenter: Sendable {
     }
 
     /// Segmento tocado, a partir do índice de caractere na página.
+    ///
+    /// Quando o toque não cai dentro de nenhum segmento — entre dois parágrafos, numa
+    /// legenda descartada como ruído — vale o segmento mais próximo. Voltar ao primeiro
+    /// da página fazia tocar num parágrafo do meio começar a leitura no bloco de autores.
     public func segment(in segments: [DocumentSegment],
                         pageIndex: Int,
                         characterIndex: Int) -> DocumentSegment? {
-        segments.first { $0.pageIndex == pageIndex && $0.contains(pageCharacterIndex: characterIndex) }
-            ?? segments.first { $0.pageIndex == pageIndex }
+        let onPage = segments.filter { $0.pageIndex == pageIndex }
+        guard !onPage.isEmpty else { return nil }
+
+        if let exact = onPage.first(where: { $0.contains(pageCharacterIndex: characterIndex) }) {
+            return exact
+        }
+        return onPage.min { distance(from: $0, to: characterIndex) < distance(from: $1, to: characterIndex) }
+    }
+
+    private func distance(from segment: DocumentSegment, to index: Int) -> Int {
+        guard let range = segment.pageRange else { return .max }
+        if index < range.location { return range.location - index }
+        if index >= NSMaxRange(range) { return index - NSMaxRange(range) + 1 }
+        return 0
     }
 }

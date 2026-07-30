@@ -105,13 +105,44 @@ struct DocumentSegmenterTests {
         #expect(encontrado.id == alvo.id)
     }
 
-    @Test("toque fora de qualquer segmento cai no primeiro da página")
+    @Test("toque fora de qualquer segmento cai no mais próximo, não no primeiro")
     func toqueForaDeSegmento() throws {
-        let doc = try makePDF(pages: ["Only one paragraph exists on this page for now."])
+        // Reproduz o layout que falhou no iPad: autores no topo, corpo abaixo.
+        let doc = try makePDF(pages: [
+            "Rafael Garcia, Maria Silva, John Smith, Ana Costa.\n"
+            + "Abstract. This paper presents a method for reading documents aloud.\n"
+            + "We evaluate the approach on a corpus of scientific articles today.",
+        ])
         let s = DocumentSegmenter()
         let segs = s.segments(of: doc, documentLanguage: "en")
-        let encontrado = s.segment(in: segs, pageIndex: 0, characterIndex: 99_999)
-        #expect(encontrado?.id == segs.first?.id)
+        #expect(segs.count >= 3)
+
+        // um índice logo depois do fim do último segmento não pode voltar ao topo
+        let ultimo = try #require(segs.last)
+        let logoDepois = NSMaxRange(try #require(ultimo.pageRange)) + 1
+        #expect(s.segment(in: segs, pageIndex: 0, characterIndex: logoDepois)?.id == ultimo.id)
+
+        // e um índice muito além também escolhe o último, não o bloco de autores
+        #expect(s.segment(in: segs, pageIndex: 0, characterIndex: 99_999)?.id == ultimo.id)
+    }
+
+    @Test("toque dentro de um segmento resolve exatamente para ele")
+    func toqueDentroDeCadaSegmento() throws {
+        let doc = try makePDF(pages: [
+            "First paragraph about alpha particles here.\n"
+            + "Second paragraph about gamma radiation here.",
+        ])
+        let s = DocumentSegmenter()
+        let segs = s.segments(of: doc, documentLanguage: "en")
+        #expect(segs.count == 2)
+
+        // Um caractere exatamente entre dois segmentos contíguos fica equidistante, e
+        // qualquer escolha é defensável — o que não pode acontecer é voltar ao topo.
+        for seg in segs {
+            let range = try #require(seg.pageRange)
+            let meio = range.location + range.length / 2
+            #expect(s.segment(in: segs, pageIndex: 0, characterIndex: meio)?.id == seg.id)
+        }
     }
 
     @Test("o range de uma palavra do alinhamento cai sobre a palavra na página")

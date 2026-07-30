@@ -34,7 +34,15 @@
       "Bash(echo \"exit=$?\")",
       "Bash(security find-certificate *)",
       "Bash(openssl x509 *)",
-      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'generic/platform=iOS' -allowProvisioningUpdates build)"
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'generic/platform=iOS' -allowProvisioningUpdates build)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS,id=42EFA220-5438-5BA9-9A88-B2EDFC5519E5' -allowProvisioningUpdates build)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS,id=00008103-0012695C1E6B001E' -allowProvisioningUpdates build)",
+      "Bash(xargs -I{} echo \"instancias em execucao: {}\")",
+      "Bash(swift hitprobe.swift)",
+      "Bash(swift offsetprobe.swift)",
+      "Bash(swift selprobe.swift)",
+      "Bash(swift mapprobe.swift)",
+      "Bash(swift lineprobe.swift)"
     ]
   }
 }

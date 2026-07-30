@@ -1,3 +1,4 @@
+import FastReadCore
 import PDFKit
 import SwiftUI
 
@@ -62,12 +63,19 @@ struct PDFCanvas: UIViewRepresentable {
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let pdfView, let document = pdfView.document else { return }
             let point = gesture.location(in: pdfView)
-            guard let page = pdfView.page(for: point, nearest: true) else { return }
+            guard let page = pdfView.page(for: point, nearest: true),
+                  let pageText = page.string as NSString?
+            else { return }
 
             let pageIndex = document.index(for: page)
             let inPage = pdfView.convert(point, to: page)
-            // -1 quando o toque cai numa margem; o modelo trata como "início da página".
-            onTap(pageIndex, page.characterIndex(at: inPage))
+
+            // Mira em parágrafo, não em letra: quase todo toque cai fora de um glifo, e
+            // aí o PDFKit devolve NSNotFound. O locator resolve pelo caractere mais perto.
+            guard let index = PageTextLocator.characterIndex(on: page, at: inPage, in: pageText)
+            else { return }
+
+            onTap(pageIndex, index)
         }
 
         func apply(_ highlight: Highlight?) {
@@ -75,39 +83,24 @@ struct PDFCanvas: UIViewRepresentable {
             applied = highlight
 
             guard let pdfView, let document = pdfView.document, let highlight,
-                  let page = document.page(at: highlight.pageIndex)
+                  let page = document.page(at: highlight.pageIndex),
+                  let pageText = page.string as NSString?
             else {
                 pdfView?.highlightedSelections = nil
                 return
             }
 
             var selections: [PDFSelection] = []
-            if let segment = selection(on: page, range: highlight.segmentRange) {
+            if let segment = PageTextLocator.selection(on: page, matching: highlight.segmentRange, in: pageText) {
                 segment.color = UIColor.systemYellow.withAlphaComponent(0.22)
                 selections.append(segment)
             }
             if let wordRange = highlight.wordRange,
-               let word = selection(on: page, range: wordRange) {
+               let word = PageTextLocator.selection(on: page, matching: wordRange, in: pageText) {
                 word.color = UIColor.systemYellow.withAlphaComponent(0.75)
                 selections.append(word)
             }
             pdfView.highlightedSelections = selections.isEmpty ? nil : selections
-        }
-
-        /// Converte um intervalo de caracteres numa seleção do PDFKit.
-        ///
-        /// Não existe API pública que crie `PDFSelection` a partir de `NSRange`, então o
-        /// caminho é ir pelos retângulos do primeiro e do último caractere.
-        private func selection(on page: PDFPage, range: NSRange) -> PDFSelection? {
-            guard range.location != NSNotFound, range.length > 0,
-                  NSMaxRange(range) <= page.numberOfCharacters else { return nil }
-
-            let first = page.characterBounds(at: range.location)
-            let last = page.characterBounds(at: NSMaxRange(range) - 1)
-            guard !first.isNull, !last.isNull else { return nil }
-
-            return page.selection(from: CGPoint(x: first.minX, y: first.midY),
-                                  to: CGPoint(x: last.maxX, y: last.midY))
         }
     }
 }
