@@ -1,0 +1,43 @@
+name: FastRead
+
+options:
+  bundleIdPrefix: com.rafaelg
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+packages:
+  FastReadCore:
+    path: .
+
+targets:
+  FastRead:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App/Sources
+    dependencies:
+      - package: FastReadCore
+        product: FastReadCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rafaelg.FastRead
+        PRODUCT_NAME: FastRead
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        # 2 = iPad. O alvo é o iPad Air 5; a leitura com Pencil não faz sentido no iPhone.
+        TARGETED_DEVICE_FAMILY: "2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: >-
+          UIInterfaceOrientationPortrait
+          UIInterfaceOrientationPortraitUpsideDown
+          UIInterfaceOrientationLandscapeLeft
+          UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        # Reprodução continua com a tela bloqueada, como um audiobook.
+        INFOPLIST_KEY_UIBackgroundModes: audio
+        CODE_SIGNING_ALLOWED: NO

@@ -24,7 +24,10 @@
       "Bash(git add *)",
       "Bash(git commit -q -m ' *)",
       "Bash(swift test *)",
-      "Bash(swift pdfprobe.swift)"
+      "Bash(swift pdfprobe.swift)",
+      "Bash(xcodegen generate *)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -quiet build)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' build)"
     ]
   }
 }
