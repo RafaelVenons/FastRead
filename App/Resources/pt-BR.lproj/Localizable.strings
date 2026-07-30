@@ -1,0 +1,44 @@
+/* Tela inicial */
+"reader.empty.title" = "Nenhum PDF aberto";
+"reader.empty.description" = "Abra um PDF e toque em um parágrafo para ouvi-lo com o texto destacado palavra a palavra.";
+"reader.open" = "Abrir PDF";
+
+/* Controles */
+"reader.speed" = "Velocidade";
+"reader.speed.slow" = "Lenta";
+"reader.speed.normal" = "Normal";
+"reader.speed.fast" = "Rápida";
+"reader.autoAdvance" = "Continuar automaticamente";
+"reader.diagnostics" = "Modo diagnóstico";
+"reader.clearCache" = "Limpar cache";
+"reader.cacheSize" = "%@ em cache";
+"reader.segmentCounter" = "Trecho %lld de %lld";
+
+/* Estado */
+"reader.status.openFailed" = "Não consegui abrir esse PDF.";
+"reader.status.noText" = "Esse PDF não tem texto selecionável — provavelmente é digitalizado.";
+"reader.status.ready" = "%lld trechos · %@";
+"reader.status.synthesisFailed" = "Não consegui sintetizar esse trecho.";
+"reader.status.cacheCleared" = "Cache limpo.";
+
+/* Vozes */
+"voice.title" = "Voz";
+"voice.done" = "Concluir";
+"voice.section" = "Vozes para %@";
+"voice.onlyDefault.title" = "Só há vozes padrão instaladas";
+"voice.onlyDefault.description" = "Ajustes → Acessibilidade → Read & Speak → Vozes. Baixe uma voz Aprimorada ou Premium e ela aparece aqui.";
+"voice.quality.standard" = "Padrão";
+"voice.quality.enhanced" = "Aprimorada";
+"voice.quality.premium" = "Premium";
+
+/* Diagnóstico */
+"diag.title" = "Diagnóstico";
+"diag.location" = "pág %lld · índice %lld";
+"diag.tapLanded" = "toque caiu em";
+"diag.chosenPassage" = "trecho escolhido";
+"diag.passageStarts" = "trecho começa com";
+"diag.shouldHighlight" = "deveria acender";
+"diag.didHighlight" = "acendeu de fato";
+"diag.wordInVoice" = "palavra na voz";
+"diag.wordHighlighted" = "palavra acesa";
+"diag.none" = "nenhum";

@@ -14,28 +14,28 @@ struct DiagnosticsPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label("Diagnóstico", systemImage: "stethoscope")
+                Label("diag.title", systemImage: "stethoscope")
                     .font(.caption.weight(.semibold))
                 Spacer()
-                Text("pág \(info.page + 1) · índice \(info.characterIndex)")
+                Text(String(format: String(localized: "diag.location"), info.page + 1, info.characterIndex))
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
             }
 
-            linha("toque caiu em", info.textAtIndex, mono: true)
-            linha("trecho escolhido",
-                  info.segmentID.map { "#\($0)  \(info.segmentRange)" } ?? "nenhum")
-            linha("trecho começa com", info.segmentHead)
+            linha(String(localized: "diag.tapLanded"), info.textAtIndex, mono: true)
+            linha(String(localized: "diag.chosenPassage"),
+                  info.segmentID.map { "#\($0)  \(info.segmentRange)" } ?? String(localized: "diag.none"))
+            linha(String(localized: "diag.passageStarts"), info.segmentHead)
 
             Divider()
 
-            linha("deveria acender", info.expectedHighlight, mono: true)
-            linha("acendeu de fato", info.actualHighlight, mono: true,
+            linha(String(localized: "diag.shouldHighlight"), info.expectedHighlight, mono: true)
+            linha(String(localized: "diag.didHighlight"), info.actualHighlight, mono: true,
                   alert: divergem(info.expectedHighlight, info.actualHighlight))
 
             if let currentWord {
-                linha("palavra na voz", currentWord)
-                linha("palavra acesa", info.wordActual,
+                linha(String(localized: "diag.wordInVoice"), currentWord)
+                linha(String(localized: "diag.wordHighlighted"), info.wordActual,
                       alert: divergem(currentWord, info.wordActual))
             }
         }

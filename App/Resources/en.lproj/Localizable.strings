@@ -1,0 +1,44 @@
+/* Tela inicial */
+"reader.empty.title" = "No PDF open";
+"reader.empty.description" = "Open a PDF and tap a paragraph to hear it with word-by-word highlighting.";
+"reader.open" = "Open PDF";
+
+/* Controles */
+"reader.speed" = "Speed";
+"reader.speed.slow" = "Slow";
+"reader.speed.normal" = "Normal";
+"reader.speed.fast" = "Fast";
+"reader.autoAdvance" = "Continue automatically";
+"reader.diagnostics" = "Diagnostic mode";
+"reader.clearCache" = "Clear cache";
+"reader.cacheSize" = "%@ cached";
+"reader.segmentCounter" = "Passage %lld of %lld";
+
+/* Estado */
+"reader.status.openFailed" = "Could not open that PDF.";
+"reader.status.noText" = "This PDF has no selectable text — it is probably scanned.";
+"reader.status.ready" = "%lld passages · %@";
+"reader.status.synthesisFailed" = "Could not synthesize this passage.";
+"reader.status.cacheCleared" = "Cache cleared.";
+
+/* Vozes */
+"voice.title" = "Voice";
+"voice.done" = "Done";
+"voice.section" = "Voices for %@";
+"voice.onlyDefault.title" = "Only default voices installed";
+"voice.onlyDefault.description" = "Settings → Accessibility → Read & Speak → Voices. Download an Enhanced or Premium voice and it will show up here.";
+"voice.quality.standard" = "Default";
+"voice.quality.enhanced" = "Enhanced";
+"voice.quality.premium" = "Premium";
+
+/* Diagnóstico */
+"diag.title" = "Diagnostics";
+"diag.location" = "page %lld · index %lld";
+"diag.tapLanded" = "tap landed on";
+"diag.chosenPassage" = "chosen passage";
+"diag.passageStarts" = "passage starts with";
+"diag.shouldHighlight" = "should highlight";
+"diag.didHighlight" = "did highlight";
+"diag.wordInVoice" = "word in voice";
+"diag.wordHighlighted" = "word highlighted";
+"diag.none" = "none";

@@ -45,11 +45,11 @@ struct ReaderView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("Nenhum PDF aberto", systemImage: "doc.text")
+            Label("reader.empty.title", systemImage: "doc.text")
         } description: {
-            Text("Abra um PDF e toque em um parágrafo para ouvi-lo com o texto destacado palavra a palavra.")
+            Text("reader.empty.description")
         } actions: {
-            Button("Abrir PDF") { showingImporter = true }
+            Button("reader.open") { showingImporter = true }
                 .buttonStyle(.borderedProminent)
         }
     }
@@ -68,16 +68,16 @@ struct ReaderView: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Picker("Velocidade", selection: $model.rate) {
-                    Text("Lenta").tag(Float(0.42))
-                    Text("Normal").tag(Float(0.5))
-                    Text("Rápida").tag(Float(0.58))
+                Picker("reader.speed", selection: $model.rate) {
+                    Text("reader.speed.slow").tag(Float(0.42))
+                    Text("reader.speed.normal").tag(Float(0.5))
+                    Text("reader.speed.fast").tag(Float(0.58))
                 }
-                Toggle("Continuar automaticamente", isOn: $model.autoAdvance)
-                Toggle("Modo diagnóstico", isOn: $model.diagnosticsEnabled)
+                Toggle("reader.autoAdvance", isOn: $model.autoAdvance)
+                Toggle("reader.diagnostics", isOn: $model.diagnosticsEnabled)
                 Divider()
                 Text(model.cacheSizeDescription)
-                Button("Limpar cache", role: .destructive) { model.clearCache() }
+                Button("reader.clearCache", role: .destructive) { model.clearCache() }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -124,7 +124,7 @@ struct ReaderView: View {
             .font(.title2)
 
             if let index = model.currentIndex {
-                Text("Trecho \(index + 1) de \(model.segments.count)")
+                Text(String(format: String(localized: "reader.segmentCounter"), index + 1, model.segments.count))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("segmentCounter")

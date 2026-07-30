@@ -8,6 +8,16 @@ import SwiftUI
 /// Aqui a qualidade de cada uma fica visível antes de ouvir.
 struct VoicePickerView: View {
 
+    /// A qualidade vem do núcleo como valor; o texto exibido é do app, que é quem tem
+    /// as traduções.
+    static func label(for quality: VoiceQuality) -> String {
+        switch quality {
+        case .standard: String(localized: "voice.quality.standard")
+        case .enhanced: String(localized: "voice.quality.enhanced")
+        case .premium: String(localized: "voice.quality.premium")
+        }
+    }
+
     @Bindable var model: ReaderModel
     @Environment(\.dismiss) private var dismiss
 
@@ -18,10 +28,9 @@ struct VoicePickerView: View {
                     Section {
                         Label {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Só há vozes padrão instaladas")
+                                Text("voice.onlyDefault.title")
                                     .font(.subheadline.weight(.medium))
-                                Text("Ajustes → Acessibilidade → Read & Speak → Vozes. "
-                                     + "Baixe uma voz Aprimorada ou Premium e ela aparece aqui.")
+                                Text("voice.onlyDefault.description")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             }
@@ -31,7 +40,7 @@ struct VoicePickerView: View {
                     }
                 }
 
-                Section("Vozes para \(model.documentLanguage)") {
+                Section(String(format: String(localized: "voice.section"), model.documentLanguage)) {
                     ForEach(model.availableVoices) { voice in
                         Button {
                             model.selectedVoiceIdentifier = voice.identifier
@@ -41,9 +50,10 @@ struct VoicePickerView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(voice.name)
                                         .foregroundStyle(.primary)
-                                    Text("\(voice.quality.label) · \(voice.language)")
+                                    Text("\(Self.label(for: voice.quality)) · \(voice.language)")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                        .accessibilityIdentifier("quality-\(voice.quality.rawValue)")
                                 }
                                 Spacer()
                                 if voice.quality > .standard {
@@ -60,11 +70,12 @@ struct VoicePickerView: View {
                     }
                 }
             }
-            .navigationTitle("Voz")
+            .accessibilityIdentifier("voiceSheet")
+            .navigationTitle("voice.title")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Concluir") { dismiss() }
+                    Button("voice.done") { dismiss() }
                 }
             }
         }

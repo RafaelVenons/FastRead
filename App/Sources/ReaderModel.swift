@@ -129,7 +129,7 @@ final class ReaderModel {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
         guard let document = PDFDocument(url: url) else {
-            status = "Não consegui abrir esse PDF."
+            status = String(localized: "reader.status.openFailed")
             return
         }
 
@@ -143,8 +143,8 @@ final class ReaderModel {
         player.stop()
 
         status = segments.isEmpty
-            ? "Esse PDF não tem texto selecionável — provavelmente é digitalizado."
-            : "\(segments.count) trechos · idioma \(documentLanguage)"
+            ? String(localized: "reader.status.noText")
+            : String(format: String(localized: "reader.status.ready"), segments.count, documentLanguage)
     }
 
     // MARK: - Leitura
@@ -216,7 +216,7 @@ final class ReaderModel {
                             from: startTime)
                 status = ""
             } catch {
-                status = "Não consegui sintetizar esse trecho."
+                status = String(localized: "reader.status.synthesisFailed")
                 return
             }
 
@@ -264,11 +264,11 @@ final class ReaderModel {
 
     var cacheSizeDescription: String {
         let mb = Double(cache.totalSize()) / 1_048_576
-        return String(format: "%.1f MB em cache", mb)
+        return String(format: String(localized: "reader.cacheSize"), String(format: "%.1f MB", mb))
     }
 
     func clearCache() {
         try? cache.removeAll()
-        status = "Cache limpo."
+        status = String(localized: "reader.status.cacheCleared")
     }
 }

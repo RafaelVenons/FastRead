@@ -6,6 +6,12 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
   groupSortPosition: top
+  # Inglês é o idioma base; o app segue o idioma do sistema.
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_EMIT_LOC_STRINGS: YES
 
 packages:
   FastReadCore:
@@ -18,6 +24,7 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: App/Sources
+      - path: App/Resources
     dependencies:
       - package: FastReadCore
         product: FastReadCore

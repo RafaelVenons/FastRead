@@ -82,13 +82,49 @@ public enum PageLayoutAnalyzer {
         // seguinte começando em "bility", que é como o leitor via o texto quebrar.
         if endsHyphenated(previous, in: text) { return false }
 
+        // Corpo de letra diferente sempre separa — é título, legenda ou nota, mesmo que
+        // a frase anterior tenha ficado sem ponto.
+        if changesTypeSize(previous: previous, line: line) { return true }
+
+        // Frase inacabada continuando em minúscula atravessa a coluna: um parágrafo que
+        // termina "...from the technology and system" segue em "points of view.", e
+        // cortar aí produzia dois trechos que só fazem sentido juntos. A exigência de
+        // minúscula protege os títulos de seção, que também não terminam em ponto mas
+        // começam maiúsculos.
+        if !endsSentence(previous, in: text) && startsLowercase(line, in: text) { return false }
+
         return breaksLayout(previous: previous, line: line, bodyHeight: bodyHeight)
+    }
+
+    private static func changesTypeSize(previous: PageLine, line: PageLine) -> Bool {
+        let ratio = line.frame.height / max(previous.frame.height, 0.01)
+        return ratio > 1.25 || ratio < 0.8
+    }
+
+    /// A linha fecha uma frase?
+    private static func endsSentence(_ line: PageLine, in text: NSString) -> Bool {
+        guard NSMaxRange(line.range) <= text.length, line.range.length > 0 else { return true }
+        let content = text.substring(with: line.range).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let closing: Set<Character> = ["\"", "'", ")", "]", "}", "»", "”", "’"]
+        let terminal: Set<Character> = [".", "!", "?", "…", ":", ";"]
+        for c in content.reversed() {
+            if closing.contains(c) { continue }
+            return terminal.contains(c)
+        }
+        return true   // linha vazia não segura nada
+    }
+
+    private static func startsLowercase(_ line: PageLine, in text: NSString) -> Bool {
+        guard NSMaxRange(line.range) <= text.length, line.range.length > 0 else { return false }
+        let content = text.substring(with: line.range).trimmingCharacters(in: .whitespacesAndNewlines)
+        return content.first?.isLowercase == true
     }
 
     /// A linha termina com hífen de quebra silábica?
     private static func endsHyphenated(_ line: PageLine, in text: NSString) -> Bool {
         guard NSMaxRange(line.range) <= text.length, line.range.length > 0 else { return false }
-        let content = text.substring(with: line.range).trimmingCharacters(in: .whitespaces)
+        let content = text.substring(with: line.range).trimmingCharacters(in: .whitespacesAndNewlines)
         guard content.hasSuffix("-") else { return false }
         // "-" isolado é travessão ou marcador de lista, não palavra partida.
         return content.count > 1 && content.dropLast().last?.isLetter == true
@@ -102,11 +138,6 @@ public enum PageLayoutAnalyzer {
         // Espaço vertical maior que o entrelinhas normal separa parágrafos.
         let gap = previous.frame.minY - line.frame.maxY
         if gap > bodyHeight * 0.6 { return true }
-
-        // Corpo de letra diferente: título, legenda e nota não pertencem ao mesmo bloco
-        // que o texto corrido.
-        let ratio = line.frame.height / max(previous.frame.height, 0.01)
-        if ratio > 1.25 || ratio < 0.8 { return true }
 
         // Recuo de primeira linha, quando o parágrafo anterior já fechou a frase.
         let indent = line.frame.minX - previous.frame.minX

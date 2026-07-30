@@ -25,9 +25,9 @@ struct HyphenBlockTests {
                                                   bodyHeight: 10, text: texto) == false)
     }
 
-    @Test("sem hífen, a troca de coluna encerra o bloco")
+    @Test("sem hífen e com frase fechada, a troca de coluna encerra o bloco")
     func semHifenQuebra() {
-        let texto = "voltage, frequency, and safety\nbility profiles of power grids." as NSString
+        let texto = "voltage, frequency, and safety.\nBility profiles of power grids." as NSString
         let anterior = line(NSRange(location: 0, length: 30), CGRect(x: 48, y: 700, width: 200, height: 10))
         let seguinte = line(NSRange(location: 31, length: 31), CGRect(x: 320, y: 740, width: 200, height: 10))
 
@@ -35,9 +35,53 @@ struct HyphenBlockTests {
                                                   bodyHeight: 10, text: texto) == true)
     }
 
+    /// Relatado no artigo: um trecho terminava em "...from the technology and system" e o
+    /// seguinte era só "points of view." — a frase seguia na outra coluna.
+    @Test("frase inacabada continua na outra coluna")
+    func fraseInacabadaAtravessaColuna() {
+        let texto = "examined from the technology and system\npoints of view." as NSString
+        let anterior = line(NSRange(location: 0, length: 38), CGRect(x: 48, y: 420, width: 200, height: 10))
+        let seguinte = line(NSRange(location: 39, length: 15), CGRect(x: 320, y: 740, width: 200, height: 10))
+
+        #expect(PageLayoutAnalyzer.startsNewBlock(previous: anterior, line: seguinte,
+                                                  bodyHeight: 10, text: texto) == false)
+    }
+
+    @Test("frase fechada permite a quebra por coluna")
+    func fraseFechadaQuebra() {
+        let texto = "examined from the technology and systems.\npoints of view here." as NSString
+        let anterior = line(NSRange(location: 0, length: 41), CGRect(x: 48, y: 420, width: 200, height: 10))
+        let seguinte = line(NSRange(location: 42, length: 20), CGRect(x: 320, y: 740, width: 200, height: 10))
+
+        #expect(PageLayoutAnalyzer.startsNewBlock(previous: anterior, line: seguinte,
+                                                  bodyHeight: 10, text: texto) == true)
+    }
+
+    /// Um título de seção também não termina em ponto; o que o distingue de uma frase
+    /// interrompida é começar em maiúscula.
+    @Test("título de seção não gruda no parágrafo anterior")
+    func tituloNaoGruda() {
+        let texto = "reduced congestions and costs\n2 Introduction to the method" as NSString
+        let anterior = line(NSRange(location: 0, length: 29), CGRect(x: 48, y: 420, width: 200, height: 10))
+        let seguinte = line(NSRange(location: 30, length: 27), CGRect(x: 320, y: 740, width: 200, height: 10))
+
+        #expect(PageLayoutAnalyzer.startsNewBlock(previous: anterior, line: seguinte,
+                                                  bodyHeight: 10, text: texto) == true)
+    }
+
+    @Test("mudança de corpo de letra separa mesmo com frase aberta")
+    func fonteMaiorSempreSepara() {
+        let texto = "authors and affiliation listed above\ntitle of the article here" as NSString
+        let anterior = line(NSRange(location: 0, length: 35), CGRect(x: 48, y: 700, width: 200, height: 8))
+        let seguinte = line(NSRange(location: 36, length: 25), CGRect(x: 48, y: 670, width: 200, height: 15))
+
+        #expect(PageLayoutAnalyzer.startsNewBlock(previous: anterior, line: seguinte,
+                                                  bodyHeight: 8, text: texto) == true)
+    }
+
     @Test("hífen isolado não é palavra partida")
     func hifenIsoladoNaoSegura() {
-        let texto = "item um -\nitem dois aqui" as NSString
+        let texto = "item um -\nItem dois aqui" as NSString
         let anterior = line(NSRange(location: 0, length: 9), CGRect(x: 48, y: 700, width: 200, height: 10))
         let seguinte = line(NSRange(location: 10, length: 14), CGRect(x: 320, y: 740, width: 200, height: 10))
 

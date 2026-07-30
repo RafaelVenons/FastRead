@@ -31,8 +31,10 @@ final class ReaderUITests: XCTestCase {
         let status = app.staticTexts["status"]
 
         XCTAssertTrue(status.waitForExistence(timeout: 10), "a barra de status não apareceu")
-        XCTAssertTrue(status.label.contains("trechos"), "status inesperado: \(status.label)")
+        // Sem depender do idioma da interface: o status traz a contagem e o código do idioma.
         XCTAssertTrue(status.label.contains("en"), "idioma não detectado: \(status.label)")
+        XCTAssertTrue(status.label.rangeOfCharacter(from: .decimalDigits) != nil,
+                      "status sem contagem de trechos: \(status.label)")
     }
 
     func testTocarNoCorpoNaoComecaPeloCabecalho() throws {
@@ -93,18 +95,15 @@ final class ReaderUITests: XCTestCase {
 
         app.buttons["voicePicker"].tap()
 
-        let titulo = app.navigationBars["Voz"]
-        XCTAssertTrue(titulo.waitForExistence(timeout: 5), "o seletor de voz não abriu")
-
-        // O sistema sempre traz ao menos uma voz para inglês.
+        // A própria lista é o sinal de que abriu — mais confiável que o container da
+        // sheet, cujo identificador nem sempre é exposto ao XCUITest.
         let vozes = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'voice-'"))
+        XCTAssertTrue(vozes.firstMatch.waitForExistence(timeout: 5), "o seletor de voz não abriu")
         XCTAssertGreaterThan(vozes.count, 0, "nenhuma voz listada")
 
         // A qualidade tem que estar visível: é o ponto de existir esta tela.
-        let temQualidade = app.staticTexts.allElementsBoundByIndex.contains {
-            $0.label.contains("Padrão") || $0.label.contains("Aprimorada") || $0.label.contains("Premium")
-        }
-        XCTAssertTrue(temQualidade, "a qualidade das vozes não aparece na lista")
+        let qualidades = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH 'quality-'"))
+        XCTAssertGreaterThan(qualidades.count, 0, "a qualidade das vozes não aparece na lista")
     }
 
     func testEscolherVozFechaOSeletor() {
@@ -112,14 +111,14 @@ final class ReaderUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["pdfCanvas"].waitForExistence(timeout: 10))
 
         app.buttons["voicePicker"].tap()
-        XCTAssertTrue(app.navigationBars["Voz"].waitForExistence(timeout: 5))
 
-        let primeira = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'voice-'")).firstMatch
-        XCTAssertTrue(primeira.waitForExistence(timeout: 5))
-        primeira.tap()
+        let vozes = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'voice-'"))
+        XCTAssertTrue(vozes.firstMatch.waitForExistence(timeout: 5))
+        vozes.firstMatch.tap()
 
-        XCTAssertFalse(app.navigationBars["Voz"].waitForExistence(timeout: 3),
-                       "escolher a voz devia fechar a tela")
+        // A lista desaparecer é o sinal de que a folha fechou.
+        XCTAssertTrue(vozes.firstMatch.waitForNonExistence(timeout: 5),
+                      "escolher a voz devia fechar a tela")
     }
 
     // MARK: - Auxiliares
