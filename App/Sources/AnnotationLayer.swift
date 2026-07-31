@@ -1,7 +1,10 @@
 import FastReadCore
+import OSLog
 import PDFKit
 import PencilKit
 import UIKit
+
+private let log = Logger(subsystem: "com.rafaelg.FastRead", category: "ink")
 
 /// Coloca uma tela de desenho sobre cada página do PDF.
 ///
@@ -58,6 +61,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     /// O traço original de cada página. Guardado porque a anotação do PDF é só a
     /// representação exibida — reconvertê-la de volta perderia pressão e tipo de caneta.
     private var storedDrawings: [Int: PKDrawing] = [:]
+    private var pendingCommits: [Int: DispatchWorkItem] = [:]
 
     static var allowsFingerDrawing: Bool {
         ProcessInfo.processInfo.environment["FASTREAD_FINGER_DRAWING"] == "1"
@@ -73,6 +77,11 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     /// Escala efetiva de rasterização, para o modo de diagnóstico.
     var resolutionDescription: String {
         guard let canvas = visibleCanvas() else { return "sem canvas" }
+        let vetorizadas = pages[canvas.tag]?.annotations.filter { $0.userName == InkAnnotator.marker }.count ?? 0
+        return "vetor \(vetorizadas) · bitmap \(canvas.drawing.strokes.count) · " + geometryDescription(canvas)
+    }
+
+    private func geometryDescription(_ canvas: PKCanvasView) -> String {
         let pdfScale = pdfView?.scaleFactor ?? 0
         let screen = canvas.window?.screen.scale ?? 0
         return String(format: "pdf %.2f · tela %.0f · canvas %.1f · bounds %.0f",
@@ -284,6 +293,24 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
         onChange?()
+        scheduleCommit(for: canvasView)
+    }
+
+    /// `canvasViewDidEndUsingTool` não dispara nesta montagem — verificado por log, nem
+    /// uma vez. Sem gatilho de fim de traço, a conversão para anotação nunca acontecia e
+    /// o desenho ficava só no bitmap da tela, que é o que borra ao ampliar.
+    ///
+    /// O adiamento espera a caneta parar: converter a cada ponto faria o traço piscar
+    /// entre a tela e a anotação enquanto está sendo desenhado.
+    private func scheduleCommit(for canvas: PKCanvasView) {
+        pendingCommits[canvas.tag]?.cancel()
+
+        let work = DispatchWorkItem { [weak self, weak canvas] in
+            guard let self, let canvas else { return }
+            self.commit(canvas)
+        }
+        pendingCommits[canvas.tag] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     /// A transferência acontece ao levantar a caneta, não a cada ponto: converter durante
@@ -293,6 +320,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     }
 
     private func commit(_ canvas: PKCanvasView) {
+        pendingCommits[canvas.tag] = nil
         guard let page = pages[canvas.tag], !canvas.drawing.strokes.isEmpty else { return }
 
         let combined = PKDrawing(strokes: (storedDrawings[canvas.tag]?.strokes ?? []) + canvas.drawing.strokes)

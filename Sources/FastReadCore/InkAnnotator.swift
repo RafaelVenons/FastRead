@@ -1,7 +1,15 @@
-import FastReadCore
+import CoreGraphics
+import Foundation
 import PDFKit
 import PencilKit
+
+#if canImport(UIKit)
 import UIKit
+typealias BezierPath = UIBezierPath
+#else
+import AppKit
+typealias BezierPath = NSBezierPath
+#endif
 
 /// Transforma o traço do PencilKit em anotação de tinta do próprio PDF.
 ///
@@ -12,13 +20,13 @@ import UIKit
 ///
 /// O `PKDrawing` continua sendo o que se guarda: preserva o traço original e permite
 /// reconverter quando o documento reabre.
-enum InkAnnotator {
+public enum InkAnnotator {
 
     /// Marca as anotações que este app criou, para poder substituí-las sem tocar nas
     /// que já vieram no arquivo.
-    static let marker = "FastReadInk"
+    public static let marker = "FastReadInk"
 
-    static func annotations(from drawing: PKDrawing, pageHeight: CGFloat) -> [PDFAnnotation] {
+    public static func annotations(from drawing: PKDrawing, pageHeight: CGFloat) -> [PDFAnnotation] {
         drawing.strokes.compactMap { annotation(from: $0, pageHeight: pageHeight) }
     }
 
@@ -51,22 +59,30 @@ enum InkAnnotator {
 
         let annotation = PDFAnnotation(bounds: bounds, forType: .ink, withProperties: nil)
 
-        let bezier = UIBezierPath()
+        // `PDFAnnotation.add` quer um caminho da plataforma; o resto do arquivo é
+        // multiplataforma para que a conversão possa ser testada fora do simulador.
+        let bezier = BezierPath()
         bezier.move(to: points[0])
-        for point in points.dropFirst() { bezier.addLine(to: point) }
+        for point in points.dropFirst() {
+            #if canImport(UIKit)
+            bezier.addLine(to: point)
+            #else
+            bezier.line(to: point)
+            #endif
+        }
         annotation.add(bezier)
 
         let border = PDFBorder()
         border.lineWidth = width
         annotation.border = border
-        annotation.color = UIColor(cgColor: stroke.ink.color.cgColor)
+        annotation.color = stroke.ink.color
         annotation.userName = marker
 
         return annotation
     }
 
     /// Substitui as anotações desta camada na página, preservando as demais.
-    static func replaceAnnotations(on page: PDFPage, with drawing: PKDrawing) {
+    public static func replaceAnnotations(on page: PDFPage, with drawing: PKDrawing) {
         for existing in page.annotations where existing.userName == marker {
             page.removeAnnotation(existing)
         }

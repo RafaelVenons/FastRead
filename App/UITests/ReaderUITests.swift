@@ -22,6 +22,7 @@ final class ReaderUITests: XCTestCase {
         app.launchEnvironment["FASTREAD_OPEN_PDF"] = pdfURL.path
         // O simulador não tem Pencil; sem isto nenhum teste consegue traçar.
         app.launchEnvironment["FASTREAD_FINGER_DRAWING"] = "1"
+        app.launchEnvironment["FASTREAD_DIAGNOSTICS"] = "1"
         app.launch()
         return app
     }
@@ -258,6 +259,28 @@ final class ReaderUITests: XCTestCase {
         app.buttons["redo"].tap()
         XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) >= 1 },
                       "refazer não restaurou o traço: \(status.label)")
+    }
+
+    /// Prova que o traço vira anotação vetorial do PDF, em vez de ficar no bitmap da
+    /// tela — que é o que borra ao ampliar. O diagnóstico mostra os dois contadores.
+    func testTracoViraAnotacaoVetorial() throws {
+        let app = launchApp()
+        let pdf = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(pdf.waitForExistence(timeout: 10))
+        app.buttons["drawToggle"].tap()
+
+        let diag = app.staticTexts["drawDiagnostics"]
+        XCTAssertTrue(diag.waitForExistence(timeout: 5), "diagnóstico do desenho não apareceu")
+        XCTAssertTrue(diag.label.contains("vetor 0"), "começou com anotação: \(diag.label)")
+
+        pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+            .press(forDuration: 0.1, thenDragTo: pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)))
+
+        // A conversão é adiada até a caneta parar.
+        XCTAssertTrue(Self.aguarda(ate: 8) { diag.label.contains("vetor 1") },
+                      "o traço não virou anotação do PDF: \(diag.label)")
+        XCTAssertTrue(diag.label.contains("bitmap 0"),
+                      "a tela não foi esvaziada, o bitmap borrado continua por cima: \(diag.label)")
     }
 
     // MARK: - Auxiliares

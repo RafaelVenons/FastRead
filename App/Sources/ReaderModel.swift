@@ -38,7 +38,7 @@ final class ReaderModel {
         var wordActual: String
     }
 
-    var diagnosticsEnabled = false
+    var diagnosticsEnabled = ProcessInfo.processInfo.environment["FASTREAD_DIAGNOSTICS"] == "1"
     private(set) var diagnostics: TapDiagnostics?
 
     /// Preenchido pelo PDFCanvas com o que realmente foi realçado.

@@ -74,7 +74,9 @@
       "Bash(xargs -I{} echo \"UI passando: {}\")",
       "Bash(git revert *)",
       "Bash(xargs -I{} echo \"installGestures presente: {}\")",
-      "Bash(xargs -I{} echo \"ocorrencias: {}\")"
+      "Bash(xargs -I{} echo \"ocorrencias: {}\")",
+      "Bash(git mv *)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testTracoViraAnotacaoVetorial test)"
     ]
   }
 }
