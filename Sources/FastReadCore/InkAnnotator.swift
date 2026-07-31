@@ -26,11 +26,13 @@ public enum InkAnnotator {
     /// que já vieram no arquivo.
     public static let marker = "FastReadInk"
 
-    public static func annotations(from drawing: PKDrawing, pageHeight: CGFloat) -> [PDFAnnotation] {
-        drawing.strokes.compactMap { annotation(from: $0, pageHeight: pageHeight) }
+    public static func annotations(from drawing: PKDrawing, pageHeight: CGFloat,
+                                   calibration: InkGeometry.Calibration = .medium) -> [PDFAnnotation] {
+        drawing.strokes.compactMap { annotation(from: $0, pageHeight: pageHeight, calibration: calibration) }
     }
 
-    private static func annotation(from stroke: PKStroke, pageHeight: CGFloat) -> PDFAnnotation? {
+    private static func annotation(from stroke: PKStroke, pageHeight: CGFloat,
+                                   calibration: InkGeometry.Calibration) -> PDFAnnotation? {
         // Amostra a curva do PencilKit em passos regulares: o traço é uma spline, e os
         // pontos de controle sozinhos perderiam a curvatura.
         let path = stroke.path
@@ -53,7 +55,7 @@ public enum InkAnnotator {
         }
         guard points.count > 1 else { return nil }
 
-        let width = InkGeometry.lineWidth(fromSizes: sizes)
+        let width = InkGeometry.lineWidth(fromSizes: sizes, calibration: calibration)
         let bounds = InkGeometry.bounds(of: points, lineWidth: width)
         guard !bounds.isNull else { return nil }
 
@@ -88,12 +90,13 @@ public enum InkAnnotator {
     }
 
     /// Substitui as anotações desta camada na página, preservando as demais.
-    public static func replaceAnnotations(on page: PDFPage, with drawing: PKDrawing) {
+    public static func replaceAnnotations(on page: PDFPage, with drawing: PKDrawing,
+                                          calibration: InkGeometry.Calibration = .medium) {
         for existing in page.annotations where existing.userName == marker {
             page.removeAnnotation(existing)
         }
         let height = page.bounds(for: .mediaBox).height
-        for annotation in annotations(from: drawing, pageHeight: height) {
+        for annotation in annotations(from: drawing, pageHeight: height, calibration: calibration) {
             page.addAnnotation(annotation)
         }
     }

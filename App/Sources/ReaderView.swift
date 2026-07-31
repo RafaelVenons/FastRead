@@ -1,3 +1,4 @@
+import FastReadCore
 import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -88,6 +89,11 @@ struct ReaderView: View {
                 Toggle("reader.autoAdvance", isOn: $model.autoAdvance)
                 Toggle("reader.diagnostics", isOn: $model.diagnosticsEnabled)
                 Divider()
+                Picker("notes.thickness", selection: $model.inkCalibration) {
+                    Text("notes.thickness.fine").tag(InkGeometry.Calibration.fine)
+                    Text("notes.thickness.medium").tag(InkGeometry.Calibration.medium)
+                    Text("notes.thickness.bold").tag(InkGeometry.Calibration.bold)
+                }
                 Button("notes.clearPage", systemImage: "eraser") {
                     model.annotations.clearCurrentPage()
                 }

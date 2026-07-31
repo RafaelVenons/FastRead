@@ -105,6 +105,11 @@ final class ReaderModel {
     private(set) var documentID: DocumentIdentifier?
     let annotations: AnnotationLayer
     /// Enquanto desenha, o toque não inicia a leitura.
+    /// Espessura do traço das notas.
+    var inkCalibration: InkGeometry.Calibration = .medium {
+        didSet { annotations.calibration = inkCalibration }
+    }
+
     var isDrawing = false {
         didSet {
             strokeCount = annotations.strokeCountOnVisiblePage

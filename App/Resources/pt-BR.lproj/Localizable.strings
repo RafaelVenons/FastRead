@@ -47,3 +47,7 @@
 "notes.mode" = "Desenhando";
 "notes.clearPage" = "Apagar notas desta página";
 "notes.clearAll" = "Apagar todas as notas do documento";
+"notes.thickness" = "Espessura do traço";
+"notes.thickness.fine" = "Fina";
+"notes.thickness.medium" = "Média";
+"notes.thickness.bold" = "Grossa";

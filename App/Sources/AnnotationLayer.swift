@@ -58,6 +58,20 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
     var onChange: (() -> Void)?
 
+    /// Espessura do traço convertido. Trocar reescreve as anotações já existentes, para
+    /// o documento inteiro ficar consistente em vez de misturar calibrações.
+    var calibration: InkGeometry.Calibration = .medium {
+        didSet {
+            guard calibration != oldValue else { return }
+            for (index, page) in pages {
+                InkAnnotator.replaceAnnotations(on: page,
+                                                with: storedDrawings[index] ?? PKDrawing(),
+                                                calibration: calibration)
+            }
+            onChange?()
+        }
+    }
+
     /// O traço original de cada página. Guardado porque a anotação do PDF é só a
     /// representação exibida — reconvertê-la de volta perderia pressão e tipo de caneta.
     private var storedDrawings: [Int: PKDrawing] = [:]
@@ -135,7 +149,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
            let drawing = try? PKDrawing(data: data) {
             // O traço salvo vira anotação do PDF, que é vetorial e não borra ao ampliar.
             // A tela fica vazia: ela serve para desenhar, não para exibir o que já existe.
-            InkAnnotator.replaceAnnotations(on: page, with: drawing)
+            InkAnnotator.replaceAnnotations(on: page, with: drawing, calibration: calibration)
             storedDrawings[index] = drawing
         }
 
@@ -275,7 +289,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         let drawing = PKDrawing(strokes: strokes)
         storedDrawings[index] = drawing
         if let page = pages[index] {
-            InkAnnotator.replaceAnnotations(on: page, with: drawing)
+            InkAnnotator.replaceAnnotations(on: page, with: drawing, calibration: calibration)
         }
         persistStored(page: index)
         onChange?()
@@ -325,7 +339,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
         let combined = PKDrawing(strokes: (storedDrawings[canvas.tag]?.strokes ?? []) + canvas.drawing.strokes)
         storedDrawings[canvas.tag] = combined
-        InkAnnotator.replaceAnnotations(on: page, with: combined)
+        InkAnnotator.replaceAnnotations(on: page, with: combined, calibration: calibration)
 
         canvas.drawing = PKDrawing()   // o traço agora vive no PDF
         persistStored(page: canvas.tag)
@@ -352,7 +366,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         storedDrawings[canvas.tag] = nil
         redoStack[canvas.tag] = nil
         if let page = pages[canvas.tag] {
-            InkAnnotator.replaceAnnotations(on: page, with: PKDrawing())
+            InkAnnotator.replaceAnnotations(on: page, with: PKDrawing(), calibration: calibration)
         }
         persistStored(page: canvas.tag)
         onChange?()
@@ -362,7 +376,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         canvases.values.forEach { $0.drawing = PKDrawing() }
         storedDrawings.removeAll()
         redoStack.removeAll()
-        pages.forEach { InkAnnotator.replaceAnnotations(on: $0.value, with: PKDrawing()) }
+        pages.forEach { InkAnnotator.replaceAnnotations(on: $0.value, with: PKDrawing(), calibration: calibration) }
         if let document { try? store.removeAll(document: document) }
         onChange?()
     }

@@ -39,10 +39,30 @@ public enum InkGeometry {
                       height: (maxY - minY) + padding * 2)
     }
 
+    /// Quanto do tamanho do pincel vira espessura da anotação.
+    ///
+    /// O PencilKit desenha o traço com bordas suaves; a anotação do PDF desenha uma
+    /// linha cheia. Usar o tamanho do estampo direto produz traço bem mais grosso do que
+    /// o que estava na tela, e escrita miúda fica ilegível.
+    public enum Calibration: String, Sendable, CaseIterable {
+        case fine
+        case medium
+        case bold
+
+        public var factor: CGFloat {
+            switch self {
+            case .fine: 0.35
+            case .medium: 0.55
+            case .bold: 0.8
+            }
+        }
+    }
+
     /// Espessura representativa de um traço, a partir das amostras de pressão.
-    public static func lineWidth(fromSizes sizes: [CGFloat]) -> CGFloat {
-        guard !sizes.isEmpty else { return 1 }
+    public static func lineWidth(fromSizes sizes: [CGFloat],
+                                 calibration: Calibration = .medium) -> CGFloat {
+        guard !sizes.isEmpty else { return minimumLineWidth }
         let average = sizes.reduce(0, +) / CGFloat(sizes.count)
-        return max(average, minimumLineWidth)
+        return max(average * calibration.factor, minimumLineWidth)
     }
 }

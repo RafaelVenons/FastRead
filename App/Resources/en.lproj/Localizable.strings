@@ -47,3 +47,7 @@
 "notes.mode" = "Drawing";
 "notes.clearPage" = "Erase notes on this page";
 "notes.clearAll" = "Erase all notes in this document";
+"notes.thickness" = "Stroke thickness";
+"notes.thickness.fine" = "Fine";
+"notes.thickness.medium" = "Medium";
+"notes.thickness.bold" = "Bold";

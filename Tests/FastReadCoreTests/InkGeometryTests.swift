@@ -69,11 +69,54 @@ struct InkGeometryTests {
         #expect(InkGeometry.bounds(of: [], lineWidth: 2) == .null)
     }
 
-    @Test("largura do traço vem da média das amostras, com mínimo utilizável")
+    @Test("largura do traço vem da média das amostras")
     func larguraDoTraco() {
-        #expect(InkGeometry.lineWidth(fromSizes: [4, 6, 8]) == 6)
-        #expect(InkGeometry.lineWidth(fromSizes: []) >= 1)
-        // uma pressão muito leve não pode produzir traço invisível
-        #expect(InkGeometry.lineWidth(fromSizes: [0.05, 0.05]) >= 0.5)
+        // A média de [4,6,8] é 6, reduzida pelo fator de calibração.
+        let largura = InkGeometry.lineWidth(fromSizes: [4, 6, 8], calibration: .medium)
+        #expect(largura > 0)
+        #expect(largura < 6, "sem calibração o traço sai mais grosso que o desenhado")
+        #expect(largura == 6 * InkGeometry.Calibration.medium.factor)
+
+        // Sem amostras, e sob pressão muito leve, nunca fica invisível.
+        #expect(InkGeometry.lineWidth(fromSizes: []) >= InkGeometry.minimumLineWidth)
+        #expect(InkGeometry.lineWidth(fromSizes: [0.05, 0.05]) >= InkGeometry.minimumLineWidth)
+    }
+
+    // MARK: - Calibração da espessura
+
+    /// `PKStrokePoint.size` é o tamanho do estampo do pincel, não a espessura visual: o
+    /// PencilKit desenha com bordas suaves e a anotação desenha cheio. Usar o valor cru
+    /// produz um traço bem mais grosso que o desenhado.
+    @Test("a espessura é uma fração do tamanho do pincel")
+    func fracaoDoPincel() {
+        let cru = InkGeometry.lineWidth(fromSizes: [6, 6, 6])
+        let calibrado = InkGeometry.lineWidth(fromSizes: [6, 6, 6], calibration: .fine)
+        #expect(calibrado < cru)
+    }
+
+    @Test("as calibrações ficam em ordem crescente")
+    func ordemDasCalibracoes() {
+        let sizes: [CGFloat] = [8, 8, 8]
+        let fina = InkGeometry.lineWidth(fromSizes: sizes, calibration: .fine)
+        let media = InkGeometry.lineWidth(fromSizes: sizes, calibration: .medium)
+        let grossa = InkGeometry.lineWidth(fromSizes: sizes, calibration: .bold)
+
+        #expect(fina < media)
+        #expect(media < grossa)
+    }
+
+    @Test("nenhuma calibração produz traço invisível")
+    func nuncaInvisivel() {
+        for calibracao in InkGeometry.Calibration.allCases {
+            let largura = InkGeometry.lineWidth(fromSizes: [0.1], calibration: calibracao)
+            #expect(largura >= InkGeometry.minimumLineWidth)
+        }
+    }
+
+    @Test("a calibração preserva a proporção entre traços")
+    func preservaProporcao() {
+        let fino = InkGeometry.lineWidth(fromSizes: [2], calibration: .fine)
+        let grosso = InkGeometry.lineWidth(fromSizes: [10], calibration: .fine)
+        #expect(grosso > fino)
     }
 }
