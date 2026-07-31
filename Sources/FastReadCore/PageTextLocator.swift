@@ -13,8 +13,16 @@ import PDFKit
 /// esperado, em vez de confiar na conta.
 public enum PageTextLocator {
 
-    /// Desvios tentados em volta da estimativa, em ordem de plausibilidade.
-    private static let probes = [0, -1, 1, -2, 2, -3, 3, -4, 4]
+    /// Desvios tentados em volta da estimativa, do mais provável ao menos.
+    ///
+    /// O alcance vai a ±16 porque a estimativa erra mais em trechos longos que em
+    /// palavras soltas: medido nos artigos, o realce de parágrafo começava até 5
+    /// caracteres depois do início, e um limite de ±4 deixava esses casos sem correção.
+    private static let probes: [Int] = {
+        var result = [0]
+        for delta in 1...16 { result.append(-delta); result.append(delta) }
+        return result
+    }()
 
     // MARK: - Texto → seleção
 
@@ -32,24 +40,43 @@ public enum PageTextLocator {
         let expected = pageText.substring(with: range)
         let estimate = boundsIndex(for: range.location, in: pageText)
 
-        var fallback: PDFSelection?
+        let wanted = collapsed(expected)
+        // Exigir o texto inteiro idêntico não funciona em trecho de várias linhas: a
+        // seleção do PDFKit difere do `page.string` no espaçamento, a comparação falhava
+        // sempre e o realce ficava no candidato errado. Alinhar pelo começo é o que
+        // determina o deslocamento; o fim se resolve escolhendo a borda.
+        let head = String(wanted.prefix(24))
+
+        var best: (selection: PDFSelection, score: Int)?
+
+        // O fim vem convertido, não somado ao comprimento: `range.length` conta as
+        // quebras de linha de `page.string`, que não ocupam posição entre os glifos.
+        // Somá-lo esticava a seleção uma posição por linha do trecho — a sobra de ~3
+        // caracteres que aparecia no fim de cada parágrafo.
+        let estimateEnd = boundsIndex(for: NSMaxRange(range) - 1, in: pageText)
+
         for delta in probes {
             let start = estimate + delta
-            guard start >= 0, start + range.length <= page.numberOfCharacters else { continue }
+            let end = estimateEnd + delta
 
-            // Onde encostar o ponto final depende do que vem logo depois do trecho:
-            // no fim do último glifo o PDFKit às vezes engole o caractere seguinte, no
-            // começo dele às vezes corta o último. Testar os dois e conferir o texto sai
-            // mais barato do que tentar prever qual vale em cada caso.
             for edge in SelectionEdge.allCases {
                 guard let candidate = selection(on: page, boundsStart: start,
-                                                length: range.length, edge: edge) else { continue }
-                if sameText(candidate.string, expected) { return candidate }
-                if fallback == nil { fallback = candidate }
+                                                boundsEnd: end, edge: edge),
+                      let text = candidate.string else { continue }
+
+                let got = collapsed(text)
+                if got == wanted { return candidate }
+
+                // Sem correspondência exata: prefere quem começa igual e, entre esses,
+                // quem tem o comprimento mais próximo — é o que evita sobrar ou faltar
+                // texto na ponta.
+                let alignedStart = got.hasPrefix(head) || wanted.hasPrefix(String(got.prefix(24)))
+                let score = (alignedStart ? 0 : 10_000) + abs(got.count - wanted.count)
+                if best == nil || score < best!.score { best = (candidate, score) }
             }
         }
         // Melhor um realce ligeiramente torto do que nenhum.
-        return fallback
+        return best?.selection
     }
 
     private enum SelectionEdge: CaseIterable {
@@ -87,10 +114,13 @@ public enum PageTextLocator {
         return stringIndex - breaks
     }
 
-    private static func selection(on page: PDFPage, boundsStart: Int, length: Int,
+    private static func selection(on page: PDFPage, boundsStart: Int, boundsEnd: Int,
                                   edge: SelectionEdge) -> PDFSelection? {
+        guard boundsStart >= 0, boundsEnd >= boundsStart,
+              boundsEnd < page.numberOfCharacters else { return nil }
+
         let first = page.characterBounds(at: boundsStart)
-        let last = page.characterBounds(at: boundsStart + length - 1)
+        let last = page.characterBounds(at: boundsEnd)
         guard !first.isNull, !last.isNull else { return nil }
 
         let end = switch edge {
@@ -134,7 +164,8 @@ public enum PageTextLocator {
         let anchorLength = min(16, page.numberOfCharacters - boundsIndex)
         guard anchorLength > 2,
               let read = selection(on: page, boundsStart: boundsIndex,
-                                   length: anchorLength, edge: .trailing)?.string
+                                   boundsEnd: boundsIndex + anchorLength - 1,
+                                   edge: .trailing)?.string
         else { return estimate }
 
         // Só até o primeiro espaço: uma palavra não tem espaçamento interno para divergir.

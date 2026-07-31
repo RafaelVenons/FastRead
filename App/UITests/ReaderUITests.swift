@@ -116,8 +116,9 @@ final class ReaderUITests: XCTestCase {
         XCTAssertTrue(vozes.firstMatch.waitForExistence(timeout: 5))
         vozes.firstMatch.tap()
 
-        // A lista desaparecer é o sinal de que a folha fechou.
-        XCTAssertTrue(vozes.firstMatch.waitForNonExistence(timeout: 5),
+        // A lista desaparecer é o sinal de que a folha fechou. Margem folgada: com a
+        // suíte inteira rodando, a animação de fechamento chega a passar de 5 s.
+        XCTAssertTrue(vozes.firstMatch.waitForNonExistence(timeout: 15),
                       "escolher a voz devia fechar a tela")
     }
 

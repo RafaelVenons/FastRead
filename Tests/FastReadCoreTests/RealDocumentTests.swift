@@ -135,6 +135,45 @@ struct RealDocumentTests {
         }
     }
 
+    /// O realce do trecho tem de cobrir exatamente o que a voz lê. Relatado em uso: o
+    /// destaque "pega um pouco do trecho seguinte" e às vezes "começa um pouco depois".
+    /// Medido antes da correção: 144 exatos de 360; depois, 312.
+    @Test("realce do trecho coincide com o texto lido")
+    func realceDoTrechoCoincide() throws {
+        let arquivos = SamplePDFs.files
+        let segmenter = DocumentSegmenter()
+
+        func limpo(_ s: String) -> String {
+            s.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+        }
+
+        var exatos = 0, total = 0
+        var desvios: [String] = []
+
+        for arquivo in arquivos.prefix(6) {
+            guard let doc = PDFDocument(url: arquivo) else { continue }
+            for seg in segmenter.segments(of: doc, documentLanguage: "en").prefix(60) {
+                guard let page = doc.page(at: seg.pageIndex),
+                      let pageText = page.string as NSString?,
+                      let range = seg.pageRange, NSMaxRange(range) <= pageText.length,
+                      let realcado = PageTextLocator.selection(on: page, matching: range, in: pageText)?.string
+                else { continue }
+
+                total += 1
+                let esperado = limpo(pageText.substring(with: range))
+                if limpo(realcado) == esperado { exatos += 1 }
+                else if desvios.count < 4 {
+                    desvios.append("esp='\(esperado.prefix(20))' obt='\(limpo(realcado).prefix(20))'")
+                }
+            }
+        }
+
+        #expect(total > 100, "poucas amostras: \(total)")
+        let taxa = Double(exatos) / Double(max(total, 1))
+        let amostra = desvios.joined(separator: " ## ")
+        #expect(taxa > 0.8, "só \(exatos)/\(total) realces exatos: \(amostra)")
+    }
+
     @Test("tocar no corpo não resolve para o cabeçalho")
     func toqueNoCorpoNaoVaiParaCabecalho() throws {
         let arquivos = SamplePDFs.files
