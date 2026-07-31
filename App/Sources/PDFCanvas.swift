@@ -31,6 +31,9 @@ struct PDFCanvas: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
+        // O provider tem de estar no lugar ANTES do documento: o PDFKit só o consulta ao
+        // dispor as páginas, e atribuí-lo depois não criava tela de desenho nenhuma.
+        annotations?.attach(to: view, document: documentID)
         view.document = document
         view.autoScales = true
         view.displayDirection = .vertical
@@ -46,18 +49,20 @@ struct PDFCanvas: UIViewRepresentable {
         view.addGestureRecognizer(tap)
 
         context.coordinator.pdfView = view
-        annotations?.attach(to: view, document: documentID)
         return view
     }
 
     func updateUIView(_ view: PDFView, context: Context) {
         if view.document !== document {
-            view.document = document
             annotations?.attach(to: view, document: documentID)
+            view.document = document
         }
-        annotations?.isDrawingEnabled = isDrawing
-        // Sem isto o PDFView engole os toques antes da tela de desenho recebê-los.
+        // `isInMarkupMode` é o que faz o PDFKit ligar a interação nas page views. Sem
+        // ele, PDFPageView fica com isUserInteractionEnabled = false e nenhum toque
+        // chega à tela de desenho, por mais que ela esteja correta — verificado
+        // percorrendo a cadeia de hit-testing.
         view.isInMarkupMode = isDrawing
+        annotations?.isDrawingEnabled = isDrawing
         context.coordinator.isDrawing = isDrawing
         context.coordinator.onTap = onTap
         context.coordinator.onHighlight = onHighlight

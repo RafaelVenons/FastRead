@@ -44,6 +44,6 @@
 "diag.none" = "none";
 
 /* Notas com Apple Pencil */
-"notes.mode" = "Drawing · two fingers undo, three redo";
+"notes.mode" = "Drawing";
 "notes.clearPage" = "Erase notes on this page";
 "notes.clearAll" = "Erase all notes in this document";

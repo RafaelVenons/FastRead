@@ -111,9 +111,28 @@ struct ReaderView: View {
             }
 
             if model.isDrawing {
-                Label("notes.mode", systemImage: "applepencil.tip")
-                    .font(.caption)
-                    .foregroundStyle(.tint)
+                HStack(spacing: 18) {
+                    // Os gestos de dois e três dedos existem, mas o PencilKit consome os
+                    // toques dentro do PDFView e eles nem sempre são reconhecidos; os
+                    // botões garantem desfazer e refazer.
+                    Button { model.annotations.handleUndo() } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .disabled(!model.canUndo)
+                    .accessibilityIdentifier("undo")
+
+                    Button { model.annotations.handleRedo() } label: {
+                        Image(systemName: "arrow.uturn.forward")
+                    }
+                    .disabled(!model.canRedo)
+                    .accessibilityIdentifier("redo")
+
+                    Label("\(String(localized: "notes.mode")) · \(model.strokeCount)",
+                          systemImage: "applepencil.tip")
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                        .accessibilityIdentifier("drawStatus")
+                }
             }
 
             if !model.status.isEmpty {

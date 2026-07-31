@@ -105,7 +105,19 @@ final class ReaderModel {
     private(set) var documentID: DocumentIdentifier?
     let annotations: AnnotationLayer
     /// Enquanto desenha, o toque não inicia a leitura.
-    var isDrawing = false
+    var isDrawing = false {
+        didSet {
+            strokeCount = annotations.strokeCountOnVisiblePage
+            canUndo = annotations.canUndo
+            canRedo = annotations.canRedo
+        }
+    }
+    /// Traços na página visível — exposto para a interface e para os testes.
+    private(set) var strokeCount = 0
+    /// Espelhados do `AnnotationLayer`, que não é observável: sem isto os botões de
+    /// desfazer e refazer nunca saem de desabilitados.
+    private(set) var canUndo = false
+    private(set) var canRedo = false
 
     private let segmenter = DocumentSegmenter()
     private let engine = AVSpeechSynthesisEngine()
@@ -124,6 +136,12 @@ final class ReaderModel {
         player.onFinish = { [weak self] in
             guard let self, self.autoAdvance else { return }
             self.playNext()
+        }
+        annotations.onChange = { [weak self] in
+            guard let self else { return }
+            self.strokeCount = self.annotations.strokeCountOnVisiblePage
+            self.canUndo = self.annotations.canUndo
+            self.canRedo = self.annotations.canRedo
         }
     }
 

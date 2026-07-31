@@ -62,7 +62,16 @@
       "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test --filter nenhumTrechoComecaEmMinuscula)",
       "Bash(swift build *)",
       "Bash(EDGE=\"/Users/rafaelg/projects/FastRead/BESS\" swift test --filter TempEdge)",
-      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testEscolherVozFechaOSeletor test)"
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testEscolherVozFechaOSeletor test)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testCanvasDeDesenhoExisteNoModo -only-testing:FastReadUITests/ReaderUITests/testPaletaDeFerramentasApareceNoModo -only-testing:FastReadUITests/ReaderUITests/testCanvasAceitaInteracaoNoModo test)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testCanvasDeDesenhoExisteNoModo -only-testing:FastReadUITests/ReaderUITests/testCanvasAceitaInteracaoNoModo test)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testDesenharCriaTraco test)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testDesfazerRestauraContagem -only-testing:FastReadUITests/ReaderUITests/testAbreDocumentoEIndicaOsTrechos test)",
+      "Bash(plutil -lint App/Resources/en.lproj/Localizable.strings)",
+      "Bash(plutil -lint App/Resources/pt-BR.lproj/Localizable.strings)",
+      "Bash(plutil -lint App/Resources/*/Localizable.strings)",
+      "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testDesfazerRestauraContagem test)",
+      "Bash(xargs -I{} echo \"UI passando: {}\")"
     ]
   }
 }

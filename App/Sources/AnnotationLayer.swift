@@ -14,7 +14,8 @@ import UIKit
 /// main thread, mas os protocolos são anteriores ao isolamento e não declaram isso.
 @MainActor
 final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvider,
-                             @preconcurrency PKCanvasViewDelegate {
+                             @preconcurrency PKCanvasViewDelegate,
+                             @preconcurrency UIGestureRecognizerDelegate {
 
     private let store: AnnotationStore
     private var document: DocumentIdentifier?
@@ -26,19 +27,45 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     /// que ela não aparecia.
     private let toolPicker = PKToolPicker()
 
+    /// A tela existe desde que a página é exibida; só a interação alterna.
+    ///
+    /// Criá-la sob demanda não funciona: o PDFKit consulta o provider ao dispor as
+    /// páginas e não volta a consultá-lo depois, então entrar no modo de desenho não
+    /// produzia tela alguma e a Pencil caía no PDFView, que a tratava como rolagem.
     var isDrawingEnabled = false {
         didSet {
             guard isDrawingEnabled != oldValue else { return }
             canvases.values.forEach { applyMode(to: $0) }
-            // O PDFKit só pede os overlays quando (re)dispõe as páginas. Sem forçar,
-            // entrar no modo de desenho não criava tela nenhuma e a Pencil continuava
-            // rolando o documento.
-            pdfView?.layoutDocumentView()
+            setScrollEnabled(!isDrawingEnabled)
             updateToolPicker()
         }
     }
 
+    /// O `PDFView` é um scroll view, e o pan dele fica com o arrasto antes de a tela de
+    /// desenho vê-lo — era por isso que a Pencil rolava a página em vez de traçar.
+    /// Durante o desenho a rolagem sai de cena; para navegar, basta sair do modo.
+    private func setScrollEnabled(_ enabled: Bool) {
+        guard let pdfView else { return }
+        for case let scroll as UIScrollView in pdfView.subviews {
+            scroll.isScrollEnabled = enabled
+            scroll.panGestureRecognizer.isEnabled = enabled
+        }
+    }
+
     var onChange: (() -> Void)?
+
+    static var allowsFingerDrawing: Bool {
+        ProcessInfo.processInfo.environment["FASTREAD_FINGER_DRAWING"] == "1"
+    }
+
+    /// Quantos traços a página visível tem. Existe para o teste de UI poder afirmar que
+    /// o desenho chegou à tela, em vez de só verificar que o botão mudou de estado.
+    var strokeCountOnVisiblePage: Int {
+        visibleCanvas()?.drawing.strokes.count ?? 0
+    }
+
+    var canUndo: Bool { (visibleCanvas()?.drawing.strokes.count ?? 0) > 0 }
+    var canRedo: Bool { !(redoStack[visibleCanvas()?.tag ?? -1]?.isEmpty ?? true) }
 
     init(store: AnnotationStore) {
         self.store = store
@@ -49,7 +76,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         self.document = document
         canvases.removeAll()
         pdfView.pageOverlayViewProvider = self
-        pdfView.layoutDocumentView()
+        installGestures(on: pdfView)
     }
 
     // MARK: - PDFPageOverlayViewProvider
@@ -63,14 +90,16 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         canvas.isOpaque = false
         canvas.delegate = self
         canvas.tag = index
+        canvas.accessibilityIdentifier = "annotationCanvas"
+        canvas.isAccessibilityElement = true
         // Desenhar é só com a Pencil: o dedo continua rolando, dando zoom e — fora do
-        // modo — tocando num parágrafo para ouvi-lo.
-        canvas.drawingPolicy = .pencilOnly
+        // modo — tocando num parágrafo para ouvi-lo. O simulador não tem Pencil, então os
+        // testes de UI liberam o dedo por variável de ambiente.
+        canvas.drawingPolicy = Self.allowsFingerDrawing ? .anyInput : .pencilOnly
         canvas.minimumZoomScale = 1
         canvas.maximumZoomScale = 1
         canvas.isScrollEnabled = false
         applyMode(to: canvas)
-        installGestures(on: canvas)
 
         if let document, let data = store.load(document: document, page: index),
            let drawing = try? PKDrawing(data: data) {
@@ -95,6 +124,9 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
     private func applyMode(to canvas: PKCanvasView) {
         canvas.isUserInteractionEnabled = isDrawingEnabled
+        // A page view do PDFKit vem com interação desligada; sem religá-la o toque nem
+        // chega ao canvas.
+        canvas.superview?.isUserInteractionEnabled = isDrawingEnabled
     }
 
     // MARK: - Paleta de ferramentas
@@ -105,7 +137,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         if isDrawingEnabled {
             toolPicker.addObserver(canvas)
             toolPicker.setVisible(true, forFirstResponder: canvas)
-            canvas.becomeFirstResponder()
+            let became = canvas.becomeFirstResponder()
         } else {
             canvases.values.forEach {
                 toolPicker.setVisible(false, forFirstResponder: $0)
@@ -122,11 +154,15 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
     // MARK: - Gestos de desfazer e refazer
 
+    private var gesturesInstalled = false
+
     /// Dois dedos desfaz, três dedos refaz — como no Procreate.
     ///
-    /// O iOS traz gestos parecidos, mas exigem três dedos para as duas ações e nem sempre
-    /// chegam a uma tela dentro de um PDFView.
-    private func installGestures(on canvas: PKCanvasView) {
+    /// Ficam no `PDFView`, não na tela de desenho: o PencilKit consome os toques antes e
+    /// o gesto nunca era reconhecido — verificado, o handler não rodava uma vez sequer.
+    private func installGestures(on view: UIView) {
+        guard !gesturesInstalled else { return }
+        gesturesInstalled = true
         let undo = UITapGestureRecognizer(target: self, action: #selector(handleUndo))
         undo.numberOfTouchesRequired = 2
         undo.numberOfTapsRequired = 1
@@ -141,22 +177,49 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
         [undo, redo].forEach {
             $0.cancelsTouchesInView = false
-            canvas.addGestureRecognizer($0)
+            $0.delegate = self
+            view.addGestureRecognizer($0)
         }
     }
 
-    @objc private func handleUndo() {
-        guard isDrawingEnabled, let manager = visibleCanvas()?.undoManager, manager.canUndo else { return }
-        manager.undo()
-        feedback(.light)
-        onChange?()
+    nonisolated func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                                       shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
     }
 
-    @objc private func handleRedo() {
-        guard isDrawingEnabled, let manager = visibleCanvas()?.undoManager, manager.canRedo else { return }
-        manager.redo()
+    /// Desfazer e refazer são de dois e três dedos; um dedo (ou a Pencil) é traço e não
+    /// deve ser interceptado.
+    nonisolated func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                                       shouldReceive touch: UITouch) -> Bool {
+        return touch.type != .pencil
+    }
+
+    /// Pilha própria em vez do `undoManager` da view: dentro do PDFView o gerenciador que
+    /// chega pela cadeia de responders não recebe os traços do PencilKit, e desfazer não
+    /// fazia nada.
+    private var redoStack: [Int: [PKStroke]] = [:]
+
+    @objc func handleUndo() {
+        guard isDrawingEnabled, let canvas = visibleCanvas() else { return }
+        var strokes = canvas.drawing.strokes
+        guard let removido = strokes.popLast() else { return }
+
+        redoStack[canvas.tag, default: []].append(removido)
+        applyStrokes(strokes, to: canvas)
+        feedback(.light)
+    }
+
+    @objc func handleRedo() {
+        guard isDrawingEnabled, let canvas = visibleCanvas(),
+              let restaurado = redoStack[canvas.tag]?.popLast() else { return }
+
+        applyStrokes(canvas.drawing.strokes + [restaurado], to: canvas)
         feedback(.rigid)
-        onChange?()
+    }
+
+    private func applyStrokes(_ strokes: [PKStroke], to canvas: PKCanvasView) {
+        // A atribuição dispara o delegate, que persiste e atualiza a contagem.
+        canvas.drawing = PKDrawing(strokes: strokes)
     }
 
     /// Um toque que desfaz sem retorno tátil parece que não funcionou.
@@ -169,6 +232,11 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
         persist(canvasView)
         onChange?()
+    }
+
+    func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
+        // Traço novo invalida o histórico de refazer, como em qualquer editor.
+        redoStack[canvasView.tag] = nil
     }
 
     private func persist(_ canvas: PKCanvasView) {
