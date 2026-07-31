@@ -132,6 +132,13 @@ struct ReaderView: View {
                         .font(.caption)
                         .foregroundStyle(.tint)
                         .accessibilityIdentifier("drawStatus")
+
+                    if model.diagnosticsEnabled {
+                        Text(model.resolutionInfo)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
                 }
             }
 
