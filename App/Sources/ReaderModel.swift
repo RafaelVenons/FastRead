@@ -110,6 +110,7 @@ final class ReaderModel {
             strokeCount = annotations.strokeCountOnVisiblePage
             canUndo = annotations.canUndo
             canRedo = annotations.canRedo
+            resolutionInfo = annotations.resolutionDescription
         }
     }
     /// Traços na página visível — exposto para a interface e para os testes.
@@ -118,6 +119,7 @@ final class ReaderModel {
     /// desfazer e refazer nunca saem de desabilitados.
     private(set) var canUndo = false
     private(set) var canRedo = false
+    private(set) var resolutionInfo = ""
 
     private let segmenter = DocumentSegmenter()
     private let engine = AVSpeechSynthesisEngine()
@@ -142,6 +144,7 @@ final class ReaderModel {
             self.strokeCount = self.annotations.strokeCountOnVisiblePage
             self.canUndo = self.annotations.canUndo
             self.canRedo = self.annotations.canRedo
+            self.resolutionInfo = self.annotations.resolutionDescription
         }
     }
 

@@ -71,7 +71,9 @@
       "Bash(plutil -lint App/Resources/pt-BR.lproj/Localizable.strings)",
       "Bash(plutil -lint App/Resources/*/Localizable.strings)",
       "Bash(xcodebuild -project FastRead.xcodeproj -scheme FastRead -destination 'platform=iOS Simulator,name=iPad Air 11-inch \\(M3\\)' -only-testing:FastReadUITests/ReaderUITests/testDesfazerRestauraContagem test)",
-      "Bash(xargs -I{} echo \"UI passando: {}\")"
+      "Bash(xargs -I{} echo \"UI passando: {}\")",
+      "Bash(git revert *)",
+      "Bash(xargs -I{} echo \"installGestures presente: {}\")"
     ]
   }
 }

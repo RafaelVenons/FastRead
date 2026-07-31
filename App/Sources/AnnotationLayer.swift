@@ -64,6 +64,15 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         visibleCanvas()?.drawing.strokes.count ?? 0
     }
 
+    /// Escala efetiva de rasterização, para o modo de diagnóstico.
+    var resolutionDescription: String {
+        guard let canvas = visibleCanvas() else { return "sem canvas" }
+        let pdfScale = pdfView?.scaleFactor ?? 0
+        let screen = canvas.window?.screen.scale ?? 0
+        return String(format: "pdf %.2f · tela %.0f · canvas %.1f · bounds %.0f",
+                      pdfScale, screen, canvas.contentScaleFactor, canvas.bounds.width)
+    }
+
     var canUndo: Bool { (visibleCanvas()?.drawing.strokes.count ?? 0) > 0 }
     var canRedo: Bool { !(redoStack[visibleCanvas()?.tag ?? -1]?.isEmpty ?? true) }
 

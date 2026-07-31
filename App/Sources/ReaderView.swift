@@ -133,6 +133,15 @@ struct ReaderView: View {
                         .foregroundStyle(.tint)
                         .accessibilityIdentifier("drawStatus")
                 }
+                // Fora do HStack e do modo: assim a leitura do diagnóstico não depende
+                // de estar desenhando no momento.
+                if model.diagnosticsEnabled && model.isDrawing {
+                    Text(model.resolutionInfo)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("drawDiagnostics")
+                }
             }
 
             if !model.status.isEmpty {
