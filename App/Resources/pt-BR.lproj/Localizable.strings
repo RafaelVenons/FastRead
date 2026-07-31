@@ -44,6 +44,6 @@
 "diag.none" = "nenhum";
 
 /* Notas com Apple Pencil */
-"notes.mode" = "Desenhando — o toque para ler está pausado";
+"notes.mode" = "Desenhando · dois dedos desfaz, três refaz";
 "notes.clearPage" = "Apagar notas desta página";
 "notes.clearAll" = "Apagar todas as notas do documento";

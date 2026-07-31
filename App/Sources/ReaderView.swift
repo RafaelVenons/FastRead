@@ -8,14 +8,6 @@ struct ReaderView: View {
     @State private var showingImporter = false
     @State private var showingVoices = false
 
-    /// O seletor de ferramentas do PencilKit é por janela, não por view.
-    private var window: UIWindow? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first { $0.isKeyWindow }
-    }
-
     var body: some View {
         NavigationStack {
             Group {
@@ -73,8 +65,6 @@ struct ReaderView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 model.isDrawing.toggle()
-                if model.isDrawing { model.annotations.showToolPicker(in: window) }
-                else { model.annotations.hideToolPicker(in: window) }
             } label: {
                 Image(systemName: model.isDrawing ? "pencil.tip.crop.circle.fill" : "pencil.tip.crop.circle")
             }

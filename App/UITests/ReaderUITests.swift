@@ -135,7 +135,7 @@ final class ReaderUITests: XCTestCase {
         // O aviso de que a leitura por toque está pausada precisa aparecer, senão o
         // usuário toca no parágrafo e não entende por que nada acontece.
         let aviso = app.staticTexts.matching(NSPredicate(
-            format: "label CONTAINS[c] 'paused' OR label CONTAINS[c] 'pausado'")).firstMatch
+            format: "label CONTAINS[c] 'undo' OR label CONTAINS[c] 'desfaz'")).firstMatch
         XCTAssertTrue(aviso.waitForExistence(timeout: 5), "nenhum aviso de modo de desenho")
 
         botao.tap()
