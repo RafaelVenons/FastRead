@@ -59,7 +59,8 @@
       "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test)",
       "Bash(echo \"build exit=$?\")",
       "Bash(PROBE2=\"/Users/rafaelg/projects/FastRead/BESS/06_BESS_Aplicacoes_Dimensionamento/IET Renewable Power Gen - 2024 - Rouzbehi - Integration and control of grid‐scale battery energy storage systems .pdf\" swift test --filter TempProbe2)",
-      "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test --filter nenhumTrechoComecaEmMinuscula)"
+      "Bash(FASTREAD_SAMPLE_PDFS=\"/Users/rafaelg/projects/FastRead/BESS\" swift test --filter nenhumTrechoComecaEmMinuscula)",
+      "Bash(swift build *)"
     ]
   }
 }

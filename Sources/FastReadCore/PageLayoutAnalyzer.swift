@@ -7,11 +7,13 @@ public struct PageLine: Sendable, Equatable {
     /// Intervalo em `page.string`.
     public let range: NSRange
     public let frame: CGRect
-    /// Altura típica dos glifos da linha — a mediana, não a do retângulo que envolve tudo.
+    /// Altura de referência dos glifos: o percentil 90, não a caixa nem a mediana.
     ///
-    /// O retângulo da linha inteira não serve para comparar corpo de letra: medido num
-    /// artigo, duas linhas do mesmo parágrafo tinham 21,1 e 42,5 de altura de caixa,
-    /// razão 2,0, o que fazia a última linha parecer um título e ser separada do resto.
+    /// A caixa da linha infla com artefatos — medido, 21,1 contra 42,5 em duas linhas do
+    /// mesmo parágrafo. E a mediana oscila com a composição da linha: só "acemnorsuvwxz"
+    /// dá x-height, enquanto maiúsculas e parênteses dão altura de ascendente. O p90
+    /// captura o ascendente, que é estável e é o que de fato reflete o corpo de letra.
+    /// Medido nos artigos: mediana produzia 972 cortes indevidos de parágrafo, p90 produz 41.
     public let typicalHeight: CGFloat
 
     public init(range: NSRange, frame: CGRect, typicalHeight: CGFloat? = nil) {
@@ -88,30 +90,55 @@ public enum PageLayoutAnalyzer {
 
     // MARK: - Regras de quebra
 
+    /// Por que duas linhas foram separadas — ou o que as manteve juntas.
+    ///
+    /// Exposto para diagnóstico: sem saber qual regra disparou, ajustar limiares vira
+    /// tentativa e erro.
+    public enum BreakReason: String, Sendable {
+        case hyphenHeld          // palavra partida segurou
+        case sentenceHeld        // frase inacabada segurou
+        case sameBlock           // nenhuma regra disparou
+        case typeSize            // corpo de letra diferente
+        case column              // troca de coluna
+        case verticalGap         // espaço vertical grande
+        case indent              // recuo de primeira linha
+
+        public var separates: Bool {
+            switch self {
+            case .hyphenHeld, .sentenceHeld, .sameBlock: false
+            case .typeSize, .column, .verticalGap, .indent: true
+            }
+        }
+    }
+
+    static func breakReason(previous: PageLine, line: PageLine,
+                            bodyHeight: CGFloat, text: NSString) -> BreakReason {
+        if endsHyphenated(previous, in: text) { return .hyphenHeld }
+        if changesTypeSize(previous: previous, line: line) { return .typeSize }
+        if !endsSentence(previous, in: text) && startsLowercase(line, in: text) { return .sentenceHeld }
+
+        if line.frame.minY > previous.frame.minY + bodyHeight { return .column }
+        let gap = previous.frame.minY - line.frame.maxY
+        if gap > bodyHeight * 0.6 { return .verticalGap }
+        let indent = line.frame.minX - previous.frame.minX
+        if indent > bodyHeight * 0.8 { return .indent }
+
+        return .sameBlock
+    }
+
     static func startsNewBlock(previous: PageLine, line: PageLine,
                                bodyHeight: CGFloat, text: NSString) -> Bool {
-        // Palavra partida pelo diagramador amarra as duas linhas, inclusive através da
-        // troca de coluna: separar aqui deixaria um trecho terminando em "relia-" e o
-        // seguinte começando em "bility", que é como o leitor via o texto quebrar.
-        if endsHyphenated(previous, in: text) { return false }
-
-        // Corpo de letra diferente sempre separa — é título, legenda ou nota, mesmo que
-        // a frase anterior tenha ficado sem ponto.
-        if changesTypeSize(previous: previous, line: line) { return true }
-
-        // Frase inacabada continuando em minúscula atravessa a coluna: um parágrafo que
-        // termina "...from the technology and system" segue em "points of view.", e
-        // cortar aí produzia dois trechos que só fazem sentido juntos. A exigência de
-        // minúscula protege os títulos de seção, que também não terminam em ponto mas
-        // começam maiúsculos.
-        if !endsSentence(previous, in: text) && startsLowercase(line, in: text) { return false }
-
-        return breaksLayout(previous: previous, line: line, bodyHeight: bodyHeight)
+        breakReason(previous: previous, line: line, bodyHeight: bodyHeight, text: text).separates
     }
+
+    /// Tolerância larga de propósito: a altura medida varia entre linhas do mesmo
+    /// parágrafo, e apertá-la corta texto corrido. Um título contra o corpo passa bem de
+    /// 1,4 — no artigo de exemplo, 15 pt contra 9 pt dá 1,67.
+    private static let typeSizeTolerance: CGFloat = 1.4
 
     private static func changesTypeSize(previous: PageLine, line: PageLine) -> Bool {
         let ratio = line.typicalHeight / max(previous.typicalHeight, 0.01)
-        return ratio > 1.25 || ratio < 0.8
+        return ratio > typeSizeTolerance || ratio < 1 / typeSizeTolerance
     }
 
     /// A linha fecha uma frase?
@@ -141,22 +168,6 @@ public enum PageLayoutAnalyzer {
         guard content.hasSuffix("-") else { return false }
         // "-" isolado é travessão ou marcador de lista, não palavra partida.
         return content.count > 1 && content.dropLast().last?.isLetter == true
-    }
-
-    private static func breaksLayout(previous: PageLine, line: PageLine, bodyHeight: CGFloat) -> Bool {
-        // Colunas diferentes: um salto horizontal grande com a linha subindo de volta ao
-        // topo é troca de coluna, não continuação.
-        if line.frame.minY > previous.frame.minY + bodyHeight { return true }
-
-        // Espaço vertical maior que o entrelinhas normal separa parágrafos.
-        let gap = previous.frame.minY - line.frame.maxY
-        if gap > bodyHeight * 0.6 { return true }
-
-        // Recuo de primeira linha, quando o parágrafo anterior já fechou a frase.
-        let indent = line.frame.minX - previous.frame.minX
-        if indent > bodyHeight * 0.8 { return true }
-
-        return false
     }
 
     private static func makeBlock(_ lines: [PageLine]) -> LayoutBlock {
@@ -189,7 +200,9 @@ public enum PageLayoutAnalyzer {
         guard let box else { return nil }
 
         heights.sort()
-        let typical = heights.isEmpty ? box.height : heights[heights.count / 2]
+        let typical = heights.isEmpty
+            ? box.height
+            : heights[min(heights.count - 1, Int(Double(heights.count) * 0.9))]
         return (box, typical)
     }
 }

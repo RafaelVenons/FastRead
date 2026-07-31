@@ -123,13 +123,13 @@ struct RealDocumentTests {
 
         #expect(pares > 20, "poucos pares de texto corrido: \(pares)")
 
-        // DÍVIDA CONHECIDA: 139 de 1217 pares ainda são cortados assim nos artigos de
-        // exemplo. O caso relatado ("points of view.") está resolvido e coberto pelos
-        // testes de unidade, mas o padrão persiste em outros pontos — referências
-        // bibliográficas e parágrafos que atravessam a coluna sem que a regra de
-        // continuação dispare. Registrado como falha conhecida para ficar visível em vez
-        // de escondido atrás de um limiar frouxo.
-        withKnownIssue("corte de parágrafo ainda ocorre em ~11% dos pares") {
+        // DÍVIDA CONHECIDA: 18 de 1364 pares (1,3%). Eram 139 antes de medir o corpo de
+        // letra pelo p90 e de filtrar equações. O que resta é matemática em display —
+        // "θ=ω (3a)", "ωLPF L", "rβ =rmod αβ,R" — que interrompe o parágrafo na página
+        // e sobrevive ao filtro por trazer letras suficientes. Fechar isso exigiria
+        // reconhecer fórmula por geometria, não por texto, e o ganho seria pequeno:
+        // a voz não deveria ler essas linhas de todo modo.
+        withKnownIssue("equações em display ainda interrompem o parágrafo (1,3% dos pares)") {
             let amostra = cortados.prefix(6).joined(separator: " ## ")
             #expect(cortados.isEmpty, "\(cortados.count)/\(pares) cortados: \(amostra)")
         }

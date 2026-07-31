@@ -172,9 +172,25 @@ public struct TextSegmenter: Sendable {
         return false
     }
 
-    /// Números de página, filetes e marcas de diagramação não devem virar áudio.
+    /// O trecho vale como fala?
+    ///
+    /// Além de números de página e filetes, descarta equações em display e texto
+    /// rotacionado de figuras. Ler "ômega LPF L" ou "θ=ω (3a)" no meio de um parágrafo
+    /// atrapalha mais do que ajuda, e esses blocos são justamente os que sobram cortando
+    /// o texto corrido ao redor.
     private func isSpeakable(_ text: String) -> Bool {
-        text.count >= minCharacters && text.contains(where: \.isLetter)
+        guard text.count >= minCharacters, text.contains(where: \.isLetter) else { return false }
+
+        // Precisa de palavras de verdade, não símbolos soltos separados por espaço.
+        let words = text.split(whereSeparator: { $0 == " " || $0 == "\n" })
+        let realWords = words.filter { word in
+            word.count >= 3 && word.filter(\.isLetter).count >= 3
+        }
+        guard realWords.count >= 2 else { return false }
+
+        // E a maior parte do conteúdo tem de ser linguística.
+        let meaningful = text.filter { $0.isLetter || $0.isWhitespace || $0.isPunctuation }
+        return Double(meaningful.count) / Double(text.count) >= 0.75
     }
 
     // MARK: - Divisão por tamanho
