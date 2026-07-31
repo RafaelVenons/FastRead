@@ -38,7 +38,7 @@ final class ReaderModel {
         var wordActual: String
     }
 
-    var diagnosticsEnabled = ProcessInfo.processInfo.environment["FASTREAD_DIAGNOSTICS"] == "1"
+    var diagnosticsEnabled = false
     private(set) var diagnostics: TapDiagnostics?
 
     /// Preenchido pelo PDFCanvas com o que realmente foi realçado.
@@ -101,31 +101,6 @@ final class ReaderModel {
 
     let player = SegmentPlayer()
 
-    /// Anotações com a Apple Pencil.
-    private(set) var documentID: DocumentIdentifier?
-    let annotations: AnnotationLayer
-    /// Enquanto desenha, o toque não inicia a leitura.
-    /// Espessura do traço das notas.
-    var inkCalibration: InkGeometry.Calibration = .medium {
-        didSet { annotations.calibration = inkCalibration }
-    }
-
-    var isDrawing = false {
-        didSet {
-            strokeCount = annotations.strokeCountOnVisiblePage
-            canUndo = annotations.canUndo
-            canRedo = annotations.canRedo
-            resolutionInfo = annotations.resolutionDescription
-        }
-    }
-    /// Traços na página visível — exposto para a interface e para os testes.
-    private(set) var strokeCount = 0
-    /// Espelhados do `AnnotationLayer`, que não é observável: sem isto os botões de
-    /// desfazer e refazer nunca saem de desabilitados.
-    private(set) var canUndo = false
-    private(set) var canRedo = false
-    private(set) var resolutionInfo = ""
-
     private let segmenter = DocumentSegmenter()
     private let engine = AVSpeechSynthesisEngine()
     private let cache: DiskSegmentCache
@@ -134,22 +109,11 @@ final class ReaderModel {
     init() {
         let directory = URL.cachesDirectory.appendingPathComponent("FastRead/segments")
         cache = DiskSegmentCache(directory: directory)
-        // Anotações vão em Application Support, não em Caches: o sistema pode limpar
-        // Caches sob pressão de disco, e o áudio se regenera — o traço do usuário não.
-        annotations = AnnotationLayer(store: AnnotationStore(
-            directory: URL.applicationSupportDirectory.appendingPathComponent("FastRead/annotations")))
         pipeline = SegmentPipeline(synthesizer: engine, cache: cache, rate: 0.5)
 
         player.onFinish = { [weak self] in
             guard let self, self.autoAdvance else { return }
             self.playNext()
-        }
-        annotations.onChange = { [weak self] in
-            guard let self else { return }
-            self.strokeCount = self.annotations.strokeCountOnVisiblePage
-            self.canUndo = self.annotations.canUndo
-            self.canRedo = self.annotations.canRedo
-            self.resolutionInfo = self.annotations.resolutionDescription
         }
     }
 
@@ -170,7 +134,6 @@ final class ReaderModel {
         }
 
         self.document = document
-        documentID = DocumentIdentifier(fileAt: url)
         documentTitle = url.deletingPathExtension().lastPathComponent
         documentLanguage = segmenter.documentLanguage(of: document)
         segments = segmenter.segments(of: document, documentLanguage: documentLanguage)
