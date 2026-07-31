@@ -19,13 +19,20 @@ struct PDFCanvas: UIViewRepresentable {
     }
 
     let document: PDFDocument
+    /// Identidade estável do arquivo, para as notas reencontrarem o documento.
+    var documentID: DocumentIdentifier?
     let highlight: Highlight?
     let onTap: (_ pageIndex: Int, _ characterIndex: Int) -> Void
     /// Reporta o que foi de fato selecionado — o modo de diagnóstico compara com o esperado.
     var onHighlight: ((_ segment: String?, _ word: String?) -> Void)?
+    var ink: InkLayerController?
+    var isDrawing = false
 
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
+        // O provider tem de estar no lugar ANTES do documento: o PDFKit só o consulta ao
+        // dispor as páginas, e atribuí-lo depois não cria camada de tinta nenhuma.
+        ink?.attach(to: view, document: documentID)
         view.document = document
         view.autoScales = true
         view.displayDirection = .vertical
@@ -45,7 +52,16 @@ struct PDFCanvas: UIViewRepresentable {
     }
 
     func updateUIView(_ view: PDFView, context: Context) {
-        if view.document !== document { view.document = document }
+        if view.document !== document {
+            ink?.attach(to: view, document: documentID)
+            view.document = document
+        }
+        // `isInMarkupMode` é o que faz o PDFKit ligar a interação nas page views; sem
+        // ele, PDFPageView fica com isUserInteractionEnabled = false e nenhum toque
+        // chega à camada de tinta.
+        view.isInMarkupMode = isDrawing
+        ink?.isDrawingEnabled = isDrawing
+        context.coordinator.isDrawing = isDrawing
         context.coordinator.onTap = onTap
         context.coordinator.onHighlight = onHighlight
         context.coordinator.apply(highlight)
@@ -60,6 +76,8 @@ struct PDFCanvas: UIViewRepresentable {
         weak var pdfView: PDFView?
         var onTap: (_ pageIndex: Int, _ characterIndex: Int) -> Void
         var onHighlight: ((_ segment: String?, _ word: String?) -> Void)?
+    var ink: InkLayerController?
+    var isDrawing = false
         private var applied: Highlight?
 
         init(onTap: @escaping (_ pageIndex: Int, _ characterIndex: Int) -> Void) {
@@ -67,6 +85,7 @@ struct PDFCanvas: UIViewRepresentable {
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard !isDrawing else { return }
             guard let pdfView, let document = pdfView.document else { return }
             let point = gesture.location(in: pdfView)
             guard let page = pdfView.page(for: point, nearest: true),

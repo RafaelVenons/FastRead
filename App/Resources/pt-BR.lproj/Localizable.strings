@@ -42,3 +42,12 @@
 "diag.wordInVoice" = "palavra na voz";
 "diag.wordHighlighted" = "palavra acesa";
 "diag.none" = "nenhum";
+
+/* Notas à mão */
+"notes.mode" = "Desenhando";
+"notes.width" = "Espessura do traço";
+"notes.width.fine" = "Fina";
+"notes.width.medium" = "Média";
+"notes.width.bold" = "Grossa";
+"notes.clearPage" = "Apagar notas desta página";
+"notes.clearAll" = "Apagar todas as notas do documento";

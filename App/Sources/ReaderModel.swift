@@ -101,6 +101,24 @@ final class ReaderModel {
 
     let player = SegmentPlayer()
 
+    // MARK: - Notas à mão
+
+    private(set) var documentID: DocumentIdentifier?
+    let ink: InkLayerController
+    /// Enquanto desenha, o toque não inicia a leitura.
+    var isDrawing = false { didSet { refreshInkState() } }
+    private(set) var strokeCount = 0
+    private(set) var canUndo = false
+    private(set) var canRedo = false
+
+    var inkWidth: Double = 3 { didSet { ink.baseWidth = inkWidth } }
+
+    private func refreshInkState() {
+        strokeCount = ink.strokeCount
+        canUndo = ink.canUndo
+        canRedo = ink.canRedo
+    }
+
     private let segmenter = DocumentSegmenter()
     private let engine = AVSpeechSynthesisEngine()
     private let cache: DiskSegmentCache
@@ -109,12 +127,17 @@ final class ReaderModel {
     init() {
         let directory = URL.cachesDirectory.appendingPathComponent("FastRead/segments")
         cache = DiskSegmentCache(directory: directory)
+        // Notas em Application Support, não em Caches: o sistema pode limpar Caches sob
+        // pressão de disco, e o áudio se regenera — o traço do usuário não.
+        ink = InkLayerController(store: AnnotationStore(
+            directory: URL.applicationSupportDirectory.appendingPathComponent("FastRead/notes")))
         pipeline = SegmentPipeline(synthesizer: engine, cache: cache, rate: 0.5)
 
         player.onFinish = { [weak self] in
             guard let self, self.autoAdvance else { return }
             self.playNext()
         }
+        ink.onChange = { [weak self] in self?.refreshInkState() }
     }
 
     private func rebuildPipeline() {
@@ -134,6 +157,7 @@ final class ReaderModel {
         }
 
         self.document = document
+        documentID = DocumentIdentifier(fileAt: url)
         documentTitle = url.deletingPathExtension().lastPathComponent
         documentLanguage = segmenter.documentLanguage(of: document)
         segments = segmenter.segments(of: document, documentLanguage: documentLanguage)

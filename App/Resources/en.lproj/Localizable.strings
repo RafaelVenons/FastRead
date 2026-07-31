@@ -42,3 +42,12 @@
 "diag.wordInVoice" = "word in voice";
 "diag.wordHighlighted" = "word highlighted";
 "diag.none" = "none";
+
+/* Notas à mão */
+"notes.mode" = "Drawing";
+"notes.width" = "Stroke width";
+"notes.width.fine" = "Fine";
+"notes.width.medium" = "Medium";
+"notes.width.bold" = "Bold";
+"notes.clearPage" = "Erase notes on this page";
+"notes.clearAll" = "Erase all notes in this document";

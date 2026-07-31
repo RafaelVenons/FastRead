@@ -13,9 +13,12 @@ struct ReaderView: View {
             Group {
                 if let document = model.document {
                     PDFCanvas(document: document,
+                              documentID: model.documentID,
                               highlight: model.highlight,
                               onTap: model.handleTap,
-                              onHighlight: model.recordHighlight)
+                              onHighlight: model.recordHighlight,
+                              ink: model.ink,
+                              isDrawing: model.isDrawing)
                     .ignoresSafeArea(edges: .bottom)
                 } else {
                     emptyState
@@ -60,6 +63,13 @@ struct ReaderView: View {
             Button { showingImporter = true } label: { Image(systemName: "folder") }
         }
         ToolbarItem(placement: .topBarTrailing) {
+            Button { model.isDrawing.toggle() } label: {
+                Image(systemName: model.isDrawing ? "pencil.tip.crop.circle.fill" : "pencil.tip.crop.circle")
+            }
+            .disabled(model.document == nil)
+            .accessibilityIdentifier("drawToggle")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
             Button { showingVoices = true } label: {
                 Image(systemName: "waveform.circle")
             }
@@ -76,6 +86,14 @@ struct ReaderView: View {
                 Toggle("reader.autoAdvance", isOn: $model.autoAdvance)
                 Toggle("reader.diagnostics", isOn: $model.diagnosticsEnabled)
                 Divider()
+                Picker("notes.width", selection: $model.inkWidth) {
+                    Text("notes.width.fine").tag(1.5)
+                    Text("notes.width.medium").tag(3.0)
+                    Text("notes.width.bold").tag(6.0)
+                }
+                Button("notes.clearPage", systemImage: "eraser") { model.ink.clearCurrentPage() }
+                Button("notes.clearAll", role: .destructive) { model.ink.clearDocument() }
+                Divider()
                 Text(model.cacheSizeDescription)
                 Button("reader.clearCache", role: .destructive) { model.clearCache() }
             } label: {
@@ -89,6 +107,22 @@ struct ReaderView: View {
         VStack(spacing: 6) {
             if model.diagnosticsEnabled, let info = model.diagnostics {
                 DiagnosticsPanel(info: info, currentWord: model.currentWordText)
+            }
+
+            if model.isDrawing {
+                HStack(spacing: 18) {
+                    Button { model.ink.undo() } label: { Image(systemName: "arrow.uturn.backward") }
+                        .disabled(!model.canUndo)
+                        .accessibilityIdentifier("undo")
+                    Button { model.ink.redo() } label: { Image(systemName: "arrow.uturn.forward") }
+                        .disabled(!model.canRedo)
+                        .accessibilityIdentifier("redo")
+                    Label("\(String(localized: "notes.mode")) · \(model.strokeCount)",
+                          systemImage: "applepencil.tip")
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                        .accessibilityIdentifier("drawStatus")
+                }
             }
 
             if !model.status.isEmpty {

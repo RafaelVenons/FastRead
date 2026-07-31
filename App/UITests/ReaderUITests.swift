@@ -20,6 +20,8 @@ final class ReaderUITests: XCTestCase {
         let app = XCUIApplication()
         // Abre o documento direto, sem depender do seletor de arquivos do sistema.
         app.launchEnvironment["FASTREAD_OPEN_PDF"] = pdfURL.path
+        // O simulador não tem Pencil; sem isto nenhum teste consegue traçar.
+        app.launchEnvironment["FASTREAD_FINGER_DRAWING"] = "1"
         app.launch()
         return app
     }
@@ -122,7 +124,95 @@ final class ReaderUITests: XCTestCase {
                       "escolher a voz devia fechar a tela")
     }
 
+    // MARK: - Notas à mão
+
+    /// Os testes que faltaram nas tentativas anteriores: verificam que o traço chega ao
+    /// modelo, não que o botão mudou de estado.
+    func testDesenharRegistraTraco() throws {
+        let app = launchApp()
+        let pdf = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(pdf.waitForExistence(timeout: 10))
+
+        app.buttons["drawToggle"].tap()
+        let status = app.staticTexts["drawStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5), "modo de desenho não iniciou")
+        XCTAssertEqual(Self.tracos(em: status.label), 0)
+
+        pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+            .press(forDuration: 0.15,
+                   thenDragTo: pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.55)))
+
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) >= 1 },
+                      "o traço não chegou ao modelo: \(status.label)")
+    }
+
+    func testDesfazerRemoveOTraco() throws {
+        let app = launchApp()
+        let pdf = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(pdf.waitForExistence(timeout: 10))
+        app.buttons["drawToggle"].tap()
+
+        let status = app.staticTexts["drawStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+            .press(forDuration: 0.15,
+                   thenDragTo: pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.55)))
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) >= 1 })
+
+        let undo = app.buttons["undo"]
+        XCTAssertTrue(undo.isEnabled, "desfazer desabilitado com traço presente")
+        undo.tap()
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) == 0 },
+                      "desfazer não removeu: \(status.label)")
+
+        let redo = app.buttons["redo"]
+        XCTAssertTrue(redo.isEnabled, "refazer desabilitado depois de desfazer")
+        redo.tap()
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) >= 1 },
+                      "refazer não restaurou: \(status.label)")
+    }
+
+    func testTocarNaoLeEnquantoDesenha() throws {
+        let app = launchApp()
+        let canvas = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+
+        app.buttons["drawToggle"].tap()
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap()
+
+        XCTAssertFalse(app.staticTexts["segmentCounter"].waitForExistence(timeout: 4),
+                       "o toque iniciou a leitura em modo de desenho")
+    }
+
+    func testSairDoModoRestauraALeitura() throws {
+        let app = launchApp()
+        let canvas = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+
+        app.buttons["drawToggle"].tap()
+        app.buttons["drawToggle"].tap()
+
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap()
+        XCTAssertTrue(app.staticTexts["segmentCounter"].waitForExistence(timeout: 10),
+                      "a leitura não voltou ao sair do modo de desenho")
+    }
+
     // MARK: - Auxiliares
+
+    /// Último número do rótulo — é onde a contagem de traços aparece.
+    private static func tracos(em label: String) -> Int {
+        label.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }.last ?? -1
+    }
+
+    private static func aguarda(ate segundos: TimeInterval, _ condicao: () -> Bool) -> Bool {
+        let limite = Date().addingTimeInterval(segundos)
+        while Date() < limite {
+            if condicao() { return true }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        return condicao()
+    }
+
 
     private static func segmentIndex(from label: String) throws -> Int {
         // "Trecho 3 de 12"
