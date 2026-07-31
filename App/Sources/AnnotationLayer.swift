@@ -75,6 +75,12 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         self.pdfView = pdfView
         self.document = document
         canvases.removeAll()
+
+        // Ampliar muda quanto de tela cada ponto da página ocupa; sem reagir, o traço
+        // feito com zoom fica na resolução de antes.
+        NotificationCenter.default.removeObserver(self, name: .PDFViewScaleChanged, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(scaleChanged),
+                                               name: .PDFViewScaleChanged, object: pdfView)
         pdfView.pageOverlayViewProvider = self
         installGestures(on: pdfView)
     }
@@ -99,6 +105,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         canvas.minimumZoomScale = 1
         canvas.maximumZoomScale = 1
         canvas.isScrollEnabled = false
+        applyResolution(to: canvas)
         applyMode(to: canvas)
 
         if let document, let data = store.load(document: document, page: index),
@@ -111,7 +118,9 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     }
 
     func pdfView(_ pdfView: PDFView, willDisplayOverlayView overlayView: UIView, for page: PDFPage) {
-        guard let canvas = overlayView as? PKCanvasView, isDrawingEnabled else { return }
+        guard let canvas = overlayView as? PKCanvasView else { return }
+        applyResolution(to: canvas)
+        guard isDrawingEnabled else { return }
         toolPicker.addObserver(canvas)
         toolPicker.setVisible(true, forFirstResponder: canvas)
         canvas.becomeFirstResponder()
@@ -120,6 +129,23 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     func pdfView(_ pdfView: PDFView, willEndDisplayingOverlayView overlayView: UIView, for page: PDFPage) {
         guard let canvas = overlayView as? PKCanvasView else { return }
         persist(canvas)
+    }
+
+    @objc private func scaleChanged() {
+        canvases.values.forEach { applyResolution(to: $0) }
+    }
+
+    /// Densidade de rasterização da tela, acompanhando o zoom do PDF.
+    private func applyResolution(to canvas: PKCanvasView) {
+        let pdfScale = pdfView?.scaleFactor ?? 1
+        let screen = canvas.window?.screen.scale ?? UIScreen.main.scale
+        let scale = DrawingResolution.contentScale(pdfScale: pdfScale, screenScale: screen)
+
+        guard abs(canvas.contentScaleFactor - scale) > 0.01 else { return }
+        canvas.contentScaleFactor = scale
+        canvas.layer.contentsScale = scale
+        canvas.drawingGestureRecognizer.isEnabled = true
+        canvas.setNeedsDisplay()
     }
 
     private func applyMode(to canvas: PKCanvasView) {
