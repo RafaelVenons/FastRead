@@ -122,6 +122,52 @@ final class ReaderUITests: XCTestCase {
                       "escolher a voz devia fechar a tela")
     }
 
+    // MARK: - Notas com Apple Pencil
+
+    func testAlternarModoDeDesenho() {
+        let app = launchApp()
+        XCTAssertTrue(app.otherElements["pdfCanvas"].waitForExistence(timeout: 10))
+
+        let botao = app.buttons["drawToggle"]
+        XCTAssertTrue(botao.exists, "botão de desenho ausente")
+        botao.tap()
+
+        // O aviso de que a leitura por toque está pausada precisa aparecer, senão o
+        // usuário toca no parágrafo e não entende por que nada acontece.
+        let aviso = app.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS[c] 'paused' OR label CONTAINS[c] 'pausado'")).firstMatch
+        XCTAssertTrue(aviso.waitForExistence(timeout: 5), "nenhum aviso de modo de desenho")
+
+        botao.tap()
+        XCTAssertTrue(aviso.waitForNonExistence(timeout: 5), "aviso permaneceu fora do modo")
+    }
+
+    func testTocarNaoLeEnquantoDesenha() throws {
+        let app = launchApp()
+        let canvas = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+
+        app.buttons["drawToggle"].tap()
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap()
+
+        // Sem trecho em reprodução, o contador não deve aparecer.
+        XCTAssertFalse(app.staticTexts["segmentCounter"].waitForExistence(timeout: 4),
+                       "o toque iniciou a leitura mesmo em modo de desenho")
+    }
+
+    func testVoltarDoModoDesenhoRestauraALeitura() throws {
+        let app = launchApp()
+        let canvas = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+
+        app.buttons["drawToggle"].tap()
+        app.buttons["drawToggle"].tap()
+
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap()
+        XCTAssertTrue(app.staticTexts["segmentCounter"].waitForExistence(timeout: 10),
+                      "a leitura não voltou depois de sair do modo de desenho")
+    }
+
     // MARK: - Auxiliares
 
     private static func segmentIndex(from label: String) throws -> Int {

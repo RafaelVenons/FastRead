@@ -101,6 +101,12 @@ final class ReaderModel {
 
     let player = SegmentPlayer()
 
+    /// Anotações com a Apple Pencil.
+    private(set) var documentID: DocumentIdentifier?
+    let annotations: AnnotationLayer
+    /// Enquanto desenha, o toque não inicia a leitura.
+    var isDrawing = false
+
     private let segmenter = DocumentSegmenter()
     private let engine = AVSpeechSynthesisEngine()
     private let cache: DiskSegmentCache
@@ -109,6 +115,10 @@ final class ReaderModel {
     init() {
         let directory = URL.cachesDirectory.appendingPathComponent("FastRead/segments")
         cache = DiskSegmentCache(directory: directory)
+        // Anotações vão em Application Support, não em Caches: o sistema pode limpar
+        // Caches sob pressão de disco, e o áudio se regenera — o traço do usuário não.
+        annotations = AnnotationLayer(store: AnnotationStore(
+            directory: URL.applicationSupportDirectory.appendingPathComponent("FastRead/annotations")))
         pipeline = SegmentPipeline(synthesizer: engine, cache: cache, rate: 0.5)
 
         player.onFinish = { [weak self] in
@@ -134,6 +144,7 @@ final class ReaderModel {
         }
 
         self.document = document
+        documentID = DocumentIdentifier(fileAt: url)
         documentTitle = url.deletingPathExtension().lastPathComponent
         documentLanguage = segmenter.documentLanguage(of: document)
         segments = segmenter.segments(of: document, documentLanguage: documentLanguage)

@@ -42,3 +42,8 @@
 "diag.wordInVoice" = "palavra na voz";
 "diag.wordHighlighted" = "palavra acesa";
 "diag.none" = "nenhum";
+
+/* Notas com Apple Pencil */
+"notes.mode" = "Desenhando — o toque para ler está pausado";
+"notes.clearPage" = "Apagar notas desta página";
+"notes.clearAll" = "Apagar todas as notas do documento";

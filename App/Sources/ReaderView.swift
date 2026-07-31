@@ -8,14 +8,25 @@ struct ReaderView: View {
     @State private var showingImporter = false
     @State private var showingVoices = false
 
+    /// O seletor de ferramentas do PencilKit é por janela, não por view.
+    private var window: UIWindow? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
                 if let document = model.document {
                     PDFCanvas(document: document,
+                              documentID: model.documentID,
                               highlight: model.highlight,
                               onTap: model.handleTap,
-                              onHighlight: model.recordHighlight)
+                              onHighlight: model.recordHighlight,
+                              annotations: model.annotations,
+                              isDrawing: model.isDrawing)
                     .ignoresSafeArea(edges: .bottom)
                 } else {
                     emptyState
@@ -60,6 +71,17 @@ struct ReaderView: View {
             Button { showingImporter = true } label: { Image(systemName: "folder") }
         }
         ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                model.isDrawing.toggle()
+                if model.isDrawing { model.annotations.showToolPicker(in: window) }
+                else { model.annotations.hideToolPicker(in: window) }
+            } label: {
+                Image(systemName: model.isDrawing ? "pencil.tip.crop.circle.fill" : "pencil.tip.crop.circle")
+            }
+            .disabled(model.document == nil)
+            .accessibilityIdentifier("drawToggle")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
             Button { showingVoices = true } label: {
                 Image(systemName: "waveform.circle")
             }
@@ -76,6 +98,13 @@ struct ReaderView: View {
                 Toggle("reader.autoAdvance", isOn: $model.autoAdvance)
                 Toggle("reader.diagnostics", isOn: $model.diagnosticsEnabled)
                 Divider()
+                Button("notes.clearPage", systemImage: "eraser") {
+                    model.annotations.clearCurrentPage()
+                }
+                Button("notes.clearAll", role: .destructive) {
+                    model.annotations.clearDocument()
+                }
+                Divider()
                 Text(model.cacheSizeDescription)
                 Button("reader.clearCache", role: .destructive) { model.clearCache() }
             } label: {
@@ -89,6 +118,12 @@ struct ReaderView: View {
         VStack(spacing: 6) {
             if model.diagnosticsEnabled, let info = model.diagnostics {
                 DiagnosticsPanel(info: info, currentWord: model.currentWordText)
+            }
+
+            if model.isDrawing {
+                Label("notes.mode", systemImage: "applepencil.tip")
+                    .font(.caption)
+                    .foregroundStyle(.tint)
             }
 
             if !model.status.isEmpty {
