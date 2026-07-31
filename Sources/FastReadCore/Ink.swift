@@ -87,6 +87,8 @@ public struct InkDrawing: Codable, Sendable, Equatable {
 
     /// Fora do `Codable`: o histórico é da sessão, o que se guarda são os traços.
     private var undone: [InkStroke] = []
+    /// Distingue "desfazer o traço que fiz" de "desfazer o apagamento que fiz".
+    private var lastActionWasRemoval = false
 
     public init() {}
 
@@ -97,12 +99,20 @@ public struct InkDrawing: Codable, Sendable, Equatable {
         strokes.append(stroke)
         // Traço novo encerra a linha do tempo alternativa, como em qualquer editor.
         undone.removeAll()
+        lastActionWasRemoval = false
     }
 
-    public var canUndo: Bool { !strokes.isEmpty }
+    /// Também é possível desfazer logo após apagar, mesmo sem traços restantes.
+    public var canUndo: Bool { !strokes.isEmpty || !undone.isEmpty }
     public var canRedo: Bool { !undone.isEmpty }
 
     public mutating func undo() {
+        // Depois de apagar, desfazer restaura o que foi apagado em vez de remover outro.
+        if lastActionWasRemoval, let restored = undone.popLast() {
+            strokes.append(restored)
+            lastActionWasRemoval = false
+            return
+        }
         guard let last = strokes.popLast() else { return }
         undone.append(last)
     }
@@ -112,8 +122,17 @@ public struct InkDrawing: Codable, Sendable, Equatable {
         strokes.append(last)
     }
 
+    /// Apaga um traço, mantendo-o no histórico para poder ser restaurado.
+    public mutating func remove(at index: Int) {
+        guard strokes.indices.contains(index) else { return }
+        let removed = strokes.remove(at: index)
+        undone.append(removed)
+        lastActionWasRemoval = true
+    }
+
     public mutating func removeAll() {
         strokes.removeAll()
         undone.removeAll()
+        lastActionWasRemoval = false
     }
 }

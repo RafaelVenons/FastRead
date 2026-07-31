@@ -35,6 +35,10 @@ final class InkLayerController: NSObject, @preconcurrency PDFPageOverlayViewProv
         didSet { canvases.values.forEach { $0.baseWidth = baseWidth } }
     }
 
+    var tool: InkCanvasView.Tool = .pen {
+        didSet { canvases.values.forEach { $0.tool = tool } }
+    }
+
     /// O simulador não tem Pencil; os testes de interface liberam o dedo por variável.
     private let acceptsFinger = ProcessInfo.processInfo.environment["FASTREAD_FINGER_DRAWING"] == "1"
 
@@ -61,6 +65,7 @@ final class InkLayerController: NSObject, @preconcurrency PDFPageOverlayViewProv
         canvas.color = color
         canvas.baseWidth = baseWidth
         canvas.acceptsFingerInput = acceptsFinger
+        canvas.tool = tool
         canvas.isDrawingEnabled = isDrawingEnabled
         canvas.onStrokeFinished = { [weak self] _ in
             self?.persist(page: index)

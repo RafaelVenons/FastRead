@@ -197,6 +197,40 @@ final class ReaderUITests: XCTestCase {
                       "a leitura não voltou ao sair do modo de desenho")
     }
 
+    func testFerramentasEstaoAoAlcance() {
+        let app = launchApp()
+        XCTAssertTrue(app.otherElements["pdfCanvas"].waitForExistence(timeout: 10))
+        app.buttons["drawToggle"].tap()
+
+        // Relatado em uso: não havia como escolher cor, espessura ou borracha.
+        for ferramenta in ["toolPen", "toolEraser", "color-blue", "color-red",
+                           "width-fine", "width-bold", "undo", "redo"] {
+            XCTAssertTrue(app.buttons[ferramenta].waitForExistence(timeout: 5),
+                          "\(ferramenta) não está na barra")
+        }
+    }
+
+    func testBorrachaApagaOTraco() throws {
+        let app = launchApp()
+        let pdf = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(pdf.waitForExistence(timeout: 10))
+        app.buttons["drawToggle"].tap()
+
+        let status = app.staticTexts["drawStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+
+        let inicio = pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.45))
+        let fim = pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.45))
+        inicio.press(forDuration: 0.15, thenDragTo: fim)
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) >= 1 })
+
+        app.buttons["toolEraser"].tap()
+        pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
+
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) == 0 },
+                      "a borracha não apagou: \(status.label)")
+    }
+
     // MARK: - Auxiliares
 
     /// Último número do rótulo — é onde a contagem de traços aparece.

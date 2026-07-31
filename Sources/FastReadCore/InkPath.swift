@@ -78,6 +78,79 @@ public enum InkPath {
                         roll: p2.roll)
     }
 
+    // MARK: - Traço incremental
+
+    /// O traço partido em parte consolidada e cauda.
+    public struct Split: Sendable {
+        public let settled: [InkPoint]
+        public let tail: [InkPoint]
+    }
+
+    /// Separa os pontos para que só a cauda precise ser recalculada a cada quadro.
+    ///
+    /// Regerar o contorno inteiro faz a latência crescer com o tamanho do traço — a
+    /// suavização multiplica os pontos por seis, e um traço longo passa a custar milhares
+    /// de operações por quadro. Com a divisão, o custo por quadro fica constante.
+    ///
+    /// As partes compartilham um ponto: sem a sobreposição apareceria uma falha na emenda.
+    public static func split(_ points: [InkPoint], tailLength: Int) -> Split {
+        guard points.count > tailLength else {
+            return Split(settled: [], tail: points)
+        }
+        let cut = points.count - tailLength
+        return Split(settled: Array(points[0...cut]), tail: Array(points[cut...]))
+    }
+
+    // MARK: - Borracha
+
+    /// Índice do traço sob um ponto, ou `nil` se não houver nenhum ao alcance.
+    ///
+    /// Percorre de trás para frente: com traços sobrepostos, apaga o de cima, que é o
+    /// que o usuário vê e espera atingir.
+    public static func strokeIndex(at location: CGPoint, in strokes: [InkStroke],
+                                   tolerance: Double) -> Int? {
+        for (index, stroke) in strokes.enumerated().reversed() {
+            // A tolerância acompanha a espessura: um traço grosso é atingido de mais longe.
+            let reach = tolerance + stroke.baseWidth
+            if distance(from: location, to: stroke) <= reach { return index }
+        }
+        return nil
+    }
+
+    private static func distance(from location: CGPoint, to stroke: InkStroke) -> Double {
+        var best = Double.greatestFiniteMagnitude
+        let points = stroke.points
+
+        guard points.count > 1 else {
+            guard let only = points.first else { return best }
+            return hypot(location.x - only.location.x, location.y - only.location.y)
+        }
+
+        for index in 0..<(points.count - 1) {
+            best = min(best, distance(from: location,
+                                      segmentStart: points[index].location,
+                                      segmentEnd: points[index + 1].location))
+        }
+        return best
+    }
+
+    /// Distância de um ponto ao segmento, não à reta infinita.
+    private static func distance(from point: CGPoint,
+                                 segmentStart a: CGPoint, segmentEnd b: CGPoint) -> Double {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let lengthSquared = dx * dx + dy * dy
+
+        guard lengthSquared > 1e-9 else { return hypot(point.x - a.x, point.y - a.y) }
+
+        // Projeção contida em [0,1] para não sair das pontas do segmento.
+        var t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared
+        t = min(max(t, 0), 1)
+
+        let projected = CGPoint(x: a.x + dx * t, y: a.y + dy * t)
+        return hypot(point.x - projected.x, point.y - projected.y)
+    }
+
     // MARK: - Contorno
 
     /// Contorno fechado do traço, pronto para preencher.
@@ -108,11 +181,38 @@ public enum InkPath {
         let path = CGMutablePath()
         path.move(to: left[0])
         for point in left.dropFirst() { path.addLine(to: point) }
+
+        // Tampa arredondada no fim: sem ela o traço termina em corte reto, como se
+        // tivesse sido cortado a faca.
+        addCap(to: path, at: points[points.count - 1], stroke: stroke,
+               from: left[left.count - 1], to: right[right.count - 1])
+
         // Volta pelo outro lado, fechando o contorno.
         for point in right.reversed() { path.addLine(to: point) }
+
+        addCap(to: path, at: points[0], stroke: stroke, from: right[0], to: left[0])
         path.closeSubpath()
 
         return path
+    }
+
+    /// Semicírculo entre as duas bordas, com o raio da espessura naquele ponto.
+    private static func addCap(to path: CGMutablePath, at point: InkPoint, stroke: InkStroke,
+                               from start: CGPoint, to end: CGPoint) {
+        let center = point.location
+        let radius = width(for: point, baseWidth: stroke.baseWidth) / 2
+        guard radius > 0.01 else {
+            path.addLine(to: end)
+            return
+        }
+
+        let startAngle = atan2(start.y - center.y, start.x - center.x)
+        let endAngle = atan2(end.y - center.y, end.x - center.x)
+
+        // O sentido importa: entre as duas bordas há dois arcos, e o outro passaria por
+        // dentro do traço, deixando a ponta reta em vez de arredondada.
+        path.addArc(center: center, radius: radius,
+                    startAngle: startAngle, endAngle: endAngle, clockwise: true)
     }
 
     /// Direção normalizada do traço naquele ponto.

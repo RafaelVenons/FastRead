@@ -111,7 +111,11 @@ final class ReaderModel {
     private(set) var canUndo = false
     private(set) var canRedo = false
 
-    var inkWidth: Double = 3 { didSet { ink.baseWidth = inkWidth } }
+    var inkWidth: Double = 2.5 { didSet { ink.baseWidth = inkWidth } }
+    var inkColor: InkColor = InkColor(red: 0.1, green: 0.1, blue: 0.12) {
+        didSet { ink.color = inkColor }
+    }
+    var inkTool: InkCanvasView.Tool = .pen { didSet { ink.tool = inkTool } }
 
     private func refreshInkState() {
         strokeCount = ink.strokeCount
