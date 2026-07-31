@@ -20,6 +20,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     private let store: AnnotationStore
     private var document: DocumentIdentifier?
     private var canvases: [Int: PKCanvasView] = [:]
+    private var pages: [Int: PDFPage] = [:]
     private weak var pdfView: PDFView?
 
     /// Instância própria e retida. `PKToolPicker.shared(for:)` está obsoleto desde o
@@ -54,6 +55,10 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
     var onChange: (() -> Void)?
 
+    /// O traço original de cada página. Guardado porque a anotação do PDF é só a
+    /// representação exibida — reconvertê-la de volta perderia pressão e tipo de caneta.
+    private var storedDrawings: [Int: PKDrawing] = [:]
+
     static var allowsFingerDrawing: Bool {
         ProcessInfo.processInfo.environment["FASTREAD_FINGER_DRAWING"] == "1"
     }
@@ -61,7 +66,8 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     /// Quantos traços a página visível tem. Existe para o teste de UI poder afirmar que
     /// o desenho chegou à tela, em vez de só verificar que o botão mudou de estado.
     var strokeCountOnVisiblePage: Int {
-        visibleCanvas()?.drawing.strokes.count ?? 0
+        guard let tag = visibleCanvas()?.tag else { return 0 }
+        return (storedDrawings[tag]?.strokes.count ?? 0) + (canvases[tag]?.drawing.strokes.count ?? 0)
     }
 
     /// Escala efetiva de rasterização, para o modo de diagnóstico.
@@ -73,8 +79,6 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
                       pdfScale, screen, canvas.contentScaleFactor, canvas.bounds.width)
     }
 
-    var canUndo: Bool { (visibleCanvas()?.drawing.strokes.count ?? 0) > 0 }
-    var canRedo: Bool { !(redoStack[visibleCanvas()?.tag ?? -1]?.isEmpty ?? true) }
 
     init(store: AnnotationStore) {
         self.store = store
@@ -84,6 +88,7 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         self.pdfView = pdfView
         self.document = document
         canvases.removeAll()
+        pages.removeAll()
 
         // Ampliar muda quanto de tela cada ponto da página ocupa; sem reagir, o traço
         // feito com zoom fica na resolução de antes.
@@ -119,10 +124,14 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
         if let document, let data = store.load(document: document, page: index),
            let drawing = try? PKDrawing(data: data) {
-            canvas.drawing = drawing
+            // O traço salvo vira anotação do PDF, que é vetorial e não borra ao ampliar.
+            // A tela fica vazia: ela serve para desenhar, não para exibir o que já existe.
+            InkAnnotator.replaceAnnotations(on: page, with: drawing)
+            storedDrawings[index] = drawing
         }
 
         canvases[index] = canvas
+        pages[index] = page
         return canvas
     }
 
@@ -236,11 +245,11 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
 
     @objc func handleUndo() {
         guard isDrawingEnabled, let canvas = visibleCanvas() else { return }
-        var strokes = canvas.drawing.strokes
+        var strokes = storedDrawings[canvas.tag]?.strokes ?? []
         guard let removido = strokes.popLast() else { return }
 
         redoStack[canvas.tag, default: []].append(removido)
-        applyStrokes(strokes, to: canvas)
+        applyStored(strokes, page: canvas.tag)
         feedback(.light)
     }
 
@@ -248,14 +257,23 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
         guard isDrawingEnabled, let canvas = visibleCanvas(),
               let restaurado = redoStack[canvas.tag]?.popLast() else { return }
 
-        applyStrokes(canvas.drawing.strokes + [restaurado], to: canvas)
+        applyStored((storedDrawings[canvas.tag]?.strokes ?? []) + [restaurado], page: canvas.tag)
         feedback(.rigid)
     }
 
-    private func applyStrokes(_ strokes: [PKStroke], to canvas: PKCanvasView) {
-        // A atribuição dispara o delegate, que persiste e atualiza a contagem.
-        canvas.drawing = PKDrawing(strokes: strokes)
+    /// Reescreve o traço guardado e as anotações da página a partir dele.
+    private func applyStored(_ strokes: [PKStroke], page index: Int) {
+        let drawing = PKDrawing(strokes: strokes)
+        storedDrawings[index] = drawing
+        if let page = pages[index] {
+            InkAnnotator.replaceAnnotations(on: page, with: drawing)
+        }
+        persistStored(page: index)
+        onChange?()
     }
+
+    var canUndo: Bool { !(storedDrawings[visibleCanvas()?.tag ?? -1]?.strokes.isEmpty ?? true) }
+    var canRedo: Bool { !(redoStack[visibleCanvas()?.tag ?? -1]?.isEmpty ?? true) }
 
     /// Um toque que desfaz sem retorno tátil parece que não funcionou.
     private func feedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
@@ -265,19 +283,37 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     // MARK: - PKCanvasViewDelegate
 
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-        persist(canvasView)
         onChange?()
     }
 
+    /// A transferência acontece ao levantar a caneta, não a cada ponto: converter durante
+    /// o traço faria o desenho piscar entre a tela e a anotação.
     func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
-        // Traço novo invalida o histórico de refazer, como em qualquer editor.
-        redoStack[canvasView.tag] = nil
+        commit(canvasView)
     }
 
-    private func persist(_ canvas: PKCanvasView) {
+    private func commit(_ canvas: PKCanvasView) {
+        guard let page = pages[canvas.tag], !canvas.drawing.strokes.isEmpty else { return }
+
+        let combined = PKDrawing(strokes: (storedDrawings[canvas.tag]?.strokes ?? []) + canvas.drawing.strokes)
+        storedDrawings[canvas.tag] = combined
+        InkAnnotator.replaceAnnotations(on: page, with: combined)
+
+        canvas.drawing = PKDrawing()   // o traço agora vive no PDF
+        persistStored(page: canvas.tag)
+        onChange?()
+    }
+
+    private func persistStored(page index: Int) {
         guard let document else { return }
-        let data = canvas.drawing.strokes.isEmpty ? Data() : canvas.drawing.dataRepresentation()
-        try? store.save(data, document: document, page: canvas.tag)
+        let drawing = storedDrawings[index]
+        let data = (drawing?.strokes.isEmpty ?? true) ? Data() : drawing!.dataRepresentation()
+        try? store.save(data, document: document, page: index)
+    }
+
+
+    private func persist(_ canvas: PKCanvasView) {
+        persistStored(page: canvas.tag)
     }
 
     // MARK: - Edição
@@ -285,12 +321,20 @@ final class AnnotationLayer: NSObject, @preconcurrency PDFPageOverlayViewProvide
     func clearCurrentPage() {
         guard let canvas = visibleCanvas() else { return }
         canvas.drawing = PKDrawing()
-        persist(canvas)
+        storedDrawings[canvas.tag] = nil
+        redoStack[canvas.tag] = nil
+        if let page = pages[canvas.tag] {
+            InkAnnotator.replaceAnnotations(on: page, with: PKDrawing())
+        }
+        persistStored(page: canvas.tag)
         onChange?()
     }
 
     func clearDocument() {
         canvases.values.forEach { $0.drawing = PKDrawing() }
+        storedDrawings.removeAll()
+        redoStack.removeAll()
+        pages.forEach { InkAnnotator.replaceAnnotations(on: $0.value, with: PKDrawing()) }
         if let document { try? store.removeAll(document: document) }
         onChange?()
     }
