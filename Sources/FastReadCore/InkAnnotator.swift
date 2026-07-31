@@ -61,9 +61,15 @@ public enum InkAnnotator {
 
         // `PDFAnnotation.add` quer um caminho da plataforma; o resto do arquivo é
         // multiplataforma para que a conversão possa ser testada fora do simulador.
+        // O PDFKit desenha o caminho em coordenadas relativas ao `bounds` da anotação.
+        // Com as coordenadas absolutas da página, a anotação é criada e contada mas fica
+        // fora da própria área — existe e não aparece, que foi o sintoma em uso.
+        let origin = bounds.origin
+        let relative = points.map { CGPoint(x: $0.x - origin.x, y: $0.y - origin.y) }
+
         let bezier = BezierPath()
-        bezier.move(to: points[0])
-        for point in points.dropFirst() {
+        bezier.move(to: relative[0])
+        for point in relative.dropFirst() {
             #if canImport(UIKit)
             bezier.addLine(to: point)
             #else

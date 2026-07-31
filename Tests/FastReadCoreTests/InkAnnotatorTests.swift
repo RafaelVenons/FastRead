@@ -37,6 +37,35 @@ private func makePage() throws -> PDFPage {
 @Suite("InkAnnotator")
 struct InkAnnotatorTests {
 
+    /// O PDFKit desenha os paths de uma anotação de tinta em coordenadas relativas ao
+    /// `bounds` dela. Passando coordenadas absolutas da página, a anotação existe, é
+    /// contada, e não aparece em lugar nenhum — que foi o que se viu em uso.
+    @Test("o caminho fica em coordenadas relativas à anotação")
+    func caminhoRelativoAosBounds() throws {
+        let drawing = PKDrawing(strokes: [makeStroke(from: CGPoint(x: 300, y: 400),
+                                                     to: CGPoint(x: 400, y: 450))])
+        let anotacao = try #require(InkAnnotator.annotations(from: drawing, pageHeight: 792).first)
+        let caminho = try #require(anotacao.paths?.first)
+
+        let caixaDoCaminho = caminho.bounds
+        let area = CGRect(origin: .zero, size: anotacao.bounds.size)
+
+        #expect(area.contains(caixaDoCaminho),
+                "caminho em \(caixaDoCaminho) não cabe na anotação de tamanho \(anotacao.bounds.size)")
+    }
+
+    @Test("o caminho preserva a forma do traço")
+    func caminhoPreservaForma() throws {
+        let drawing = PKDrawing(strokes: [makeStroke(from: CGPoint(x: 100, y: 100),
+                                                     to: CGPoint(x: 300, y: 100))])
+        let anotacao = try #require(InkAnnotator.annotations(from: drawing, pageHeight: 792).first)
+        let caminho = try #require(anotacao.paths?.first)
+
+        // traço horizontal de 200 pt: largo e quase sem altura
+        #expect(caminho.bounds.width >= 190)
+        #expect(caminho.bounds.height < 20)
+    }
+
     @Test("um traço vira uma anotação")
     func tracoViraAnotacao() {
         let drawing = PKDrawing(strokes: [makeStroke(from: CGPoint(x: 100, y: 100),
