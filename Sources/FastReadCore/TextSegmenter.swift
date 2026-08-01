@@ -101,7 +101,9 @@ public struct TextSegmenter: Sendable {
                 indices.removeLast()
             }
             let candidate = MappedSegment(text: String(text), sourceIndices: indices)
-            if isSpeakable(candidate.text) { segments.append(candidate) }
+            if let cleaned = strippingMath(candidate), isSpeakable(cleaned.text) {
+                segments.append(cleaned)
+            }
             text = String.UnicodeScalarView()
             indices = []
         }
@@ -170,6 +172,40 @@ public struct TextSegmenter: Sendable {
             return terminal.contains(scalar)
         }
         return false
+    }
+
+    /// Tira as fórmulas de dentro do trecho, mantendo o mapa de índices alinhado.
+    ///
+    /// O texto e o mapa são remontados juntos, caractere a caractere: reconstruí-los em
+    /// separado desalinharia o realce, porque a junção dos pedaços insere espaços que não
+    /// existem no original.
+    private func strippingMath(_ segment: MappedSegment) -> MappedSegment? {
+        let result = MathFilter.strippingMath(from: segment.text)
+        guard result.didStrip else { return segment }
+
+        let ns = segment.text as NSString
+        var scalars = String.UnicodeScalarView()
+        var indices: [Int] = []
+
+        for (position, range) in result.keptRanges.enumerated() {
+            // separador entre pedaços que ficaram distantes no original
+            if position > 0, scalars.last != " ", let last = indices.last {
+                scalars.append(" ")
+                indices.append(last)
+            }
+            for offset in range.location..<min(NSMaxRange(range), segment.sourceIndices.count) {
+                guard let scalar = Unicode.Scalar(ns.character(at: offset)) else { continue }
+                if scalar == " ", scalars.last == " " { continue }
+                scalars.append(scalar)
+                indices.append(segment.sourceIndices[offset])
+            }
+        }
+
+        while scalars.first == " ", !indices.isEmpty { scalars.removeFirst(); indices.removeFirst() }
+        while scalars.last == " ", !indices.isEmpty { scalars.removeLast(); indices.removeLast() }
+
+        guard !scalars.isEmpty else { return nil }
+        return MappedSegment(text: String(scalars), sourceIndices: indices)
     }
 
     /// O trecho vale como fala?

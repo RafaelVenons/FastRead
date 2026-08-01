@@ -109,8 +109,8 @@ public struct DocumentSegmenter: Sendable {
 
         for segment in segments {
             guard let previous = result.last,
-                  endsHyphenated(previous.text),
                   previous.pageIndex == segment.pageIndex,
+                  continues(previous, into: segment),
                   let joined = join(previous, segment)
             else {
                 result.append(DocumentSegment(id: result.count,
@@ -124,6 +124,24 @@ public struct DocumentSegmenter: Sendable {
         return result
     }
 
+    /// O segundo trecho continua a frase do primeiro?
+    ///
+    /// Duas situações levam a isso: palavra partida por hífen, e um bloco cortado pela
+    /// análise de layout no meio de uma frase — uma equação em display entre dois pedaços
+    /// do mesmo parágrafo, por exemplo.
+    private func continues(_ first: DocumentSegment, into second: DocumentSegment) -> Bool {
+        if endsHyphenated(first.text) { return true }
+
+        let fim = first.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let inicio = second.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let ultima = fim.last, let primeira = inicio.first else { return false }
+
+        // Frase fechada encerra o trecho; minúscula no início do seguinte é o sinal de
+        // que a mesma frase prossegue.
+        let fechada: Set<Character> = [".", "!", "?", "…", ":", ";"]
+        return !fechada.contains(ultima) && primeira.isLowercase
+    }
+
     private func endsHyphenated(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasSuffix("-"), trimmed.count > 1 else { return false }
@@ -134,15 +152,19 @@ public struct DocumentSegmenter: Sendable {
     private func join(_ first: DocumentSegment, _ second: DocumentSegment) -> DocumentSegment? {
         var text = first.segment.text
         var indices = first.segment.sourceIndices
-        guard text.hasSuffix("-"), !indices.isEmpty else { return nil }
+        guard !indices.isEmpty else { return nil }
 
-        // O hífen não existe na fala; sai do texto e do mapa junto.
-        text.removeLast()
-        indices.removeLast()
-
-        // Palavra partida se cola sem espaço; caso contrário mantém a separação.
-        let continues = second.segment.text.first?.isLowercase == true
-        if !continues {
+        if text.hasSuffix("-") {
+            // O hífen não existe na fala; sai do texto e do mapa junto, e as metades da
+            // palavra se colam sem espaço.
+            text.removeLast()
+            indices.removeLast()
+            if second.segment.text.first?.isLowercase != true {
+                text += " "
+                indices.append(indices.last ?? 0)
+            }
+        } else {
+            // Frase que prossegue: as partes se separam por espaço, como estavam.
             text += " "
             indices.append(indices.last ?? 0)
         }

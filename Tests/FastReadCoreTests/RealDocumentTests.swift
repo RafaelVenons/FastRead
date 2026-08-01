@@ -94,6 +94,31 @@ struct RealDocumentTests {
     /// próprio — foi assim que "points of view." apareceu sozinho, separado da frase que
     /// terminava. Só conta texto corrido: sumários e tabelas têm linhas soltas em caixa
     /// baixa por natureza, e não é disso que se trata.
+    /// Prova independente da costura: mede o CONTEÚDO do que será falado, não a fronteira
+    /// entre trechos. Unir trechos demais zeraria o invariante de cortes sem melhorar
+    /// nada — este aqui só passa se as fórmulas de fato saírem do texto.
+    @Test("nenhum trecho falado contém fórmula")
+    func nenhumaFormulaNaFala() throws {
+        let arquivos = SamplePDFs.files
+        let segmenter = DocumentSegmenter()
+        var comFormula: [String] = []
+        var analisados = 0
+
+        for arquivo in arquivos.prefix(12) {
+            guard let doc = PDFDocument(url: arquivo) else { continue }
+            for seg in segmenter.segments(of: doc, documentLanguage: "en") {
+                analisados += 1
+                guard MathFilter.containsMathRun(seg.text) else { continue }
+                comFormula.append(String(seg.text.prefix(48)))
+            }
+        }
+
+        #expect(analisados > 100, "poucos trechos analisados: \(analisados)")
+        let taxa = Double(comFormula.count) / Double(max(analisados, 1))
+        let amostra = comFormula.prefix(4).joined(separator: " ## ")
+        #expect(taxa < 0.02, "\(comFormula.count)/\(analisados) trechos com fórmula: \(amostra)")
+    }
+
     @Test("parágrafo longo não é cortado deixando a cauda solta")
     func caudaDeParagrafoNaoViraTrecho() throws {
         let arquivos = SamplePDFs.files
@@ -123,16 +148,8 @@ struct RealDocumentTests {
 
         #expect(pares > 20, "poucos pares de texto corrido: \(pares)")
 
-        // DÍVIDA CONHECIDA: 18 de 1364 pares (1,3%). Eram 139 antes de medir o corpo de
-        // letra pelo p90 e de filtrar equações. O que resta é matemática em display —
-        // "θ=ω (3a)", "ωLPF L", "rβ =rmod αβ,R" — que interrompe o parágrafo na página
-        // e sobrevive ao filtro por trazer letras suficientes. Fechar isso exigiria
-        // reconhecer fórmula por geometria, não por texto, e o ganho seria pequeno:
-        // a voz não deveria ler essas linhas de todo modo.
-        withKnownIssue("equações em display ainda interrompem o parágrafo (1,3% dos pares)") {
-            let amostra = cortados.prefix(6).joined(separator: " ## ")
-            #expect(cortados.isEmpty, "\(cortados.count)/\(pares) cortados: \(amostra)")
-        }
+        let amostra = cortados.prefix(6).joined(separator: " ## ")
+        #expect(cortados.isEmpty, "\(cortados.count)/\(pares) cortados: \(amostra)")
     }
 
     /// O realce do trecho tem de cobrir exatamente o que a voz lê. Relatado em uso: o
