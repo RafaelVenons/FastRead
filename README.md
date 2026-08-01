@@ -1,70 +1,124 @@
-# FastRead
+<div align="center">
+  <img src="App/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png" width="120" alt="FastRead icon">
+  <h1>FastRead</h1>
+  <p><strong>A PDF reader for iPad that reads aloud, highlights word by word, and takes handwritten notes.</strong></p>
+</div>
 
-Leitor de PDF para iPad que lê um trecho em voz alta e destaca o texto **palavra a palavra**, em sincronia com a voz. Um toque no parágrafo começa a leitura: se o áudio ainda não existe, é gerado na hora; se já existe, carrega do cache.
+Tap a paragraph and it starts reading, highlighting each word in sync with the voice. If the audio doesn't exist yet it's synthesized on the spot; if it does, it loads from cache. Write on the page with Apple Pencil while you read.
 
-Tudo roda **no dispositivo, offline**. Sem servidor, sem chave de API, sem enviar o documento para lugar nenhum.
+Everything runs **on device, offline**. No server, no API key, nothing leaves the iPad.
 
-## Como o alinhamento funciona
+Built for reading scientific papers — two-column layouts, journal headers, hyphenation across columns — which is where most of the hard problems turned out to be.
 
-O plano original era usar o [Montreal Forced Aligner](https://montreal-forced-aligner.readthedocs.io/) para alinhar áudio e texto. **MFA não roda em iPadOS** (é Python/Kaldi) — e não precisa: o `AVSpeechSynthesizer` já emite markers de palavra durante a síntese, com o offset de cada uma no áudio. É alinhamento forçado nativo, de graça e offline.
+---
 
-Três armadilhas foram medidas na prática e estão cobertas por teste:
-
-| Armadilha | Sintoma se ignorada |
-|---|---|
-| `byteSampleOffset` é medido em **bytes**, não em samples | Todos os tempos 4× maiores (um áudio de 5,42 s marcava a última palavra em 18,3 s) |
-| O parâmetro `toMarkerCallback:` de `write(_:toBufferCallback:toMarkerCallback:)` **não dispara** | Zero markers; use o delegate `speechSynthesizer(_:willSpeak:utterance:)` |
-| O buffer final chega **duas vezes** (`frameLength == 0`) | Cada segmento gravado no cache em duplicidade |
-
-E duas do lado do PDF:
-
-- **O PDFKit colapsa linhas em branco**: um `\n\n` do documento chega como `\n`. Segmentar por linha em branco faria o documento inteiro virar um único segmento — o limite de parágrafo usa pontuação final.
-- **Normalizar o texto desalinha o destaque**: unir linhas e resolver hifenização muda os índices, então `MappedSegment` carrega a rota de volta para as posições da página.
-
-## Números medidos
+## Features
 
 | | |
 |---|---|
-| Velocidade de síntese | ~39× tempo real (M2); ~24× estimado no M1 do iPad Air 5 |
-| Custo de pré-gerar o próximo trecho | ~4% da duração do trecho atual |
-| Áudio em AAC 24 kbps | 17 MB/hora — contra 311 MB/hora do PCM que sai do sintetizador |
-| Livro de ~8 h de leitura | ~136 MB em cache, contra ~2,5 GB sem compressão |
-| Detecção de idioma | ~6 ms por trecho |
+| **Read aloud** | Tap any paragraph. Synthesis runs at ~24× real time on an M1 iPad, so it starts almost immediately |
+| **Word-level highlighting** | The highlight follows the voice, word by word, on the PDF itself |
+| **Resume anywhere** | Tap mid-paragraph to start from there — the audio is already cached, so it just seeks |
+| **Prefetch** | The next passages are generated while you listen; you never wait between paragraphs |
+| **Language detection** | Per document, with a per-passage override when the evidence is strong |
+| **Voice picker** | Lists installed voices with their quality, and tells you how to download better ones |
+| **Handwritten notes** | Apple Pencil, pressure-sensitive, vector from capture to screen |
 
-## Estrutura
+## What made this hard
+
+Most of the work went into problems that only show up in real documents. Each one is covered by a test.
+
+**PDFKit collapses blank lines.** A `\n\n` in the source arrives as a single `\n`. Splitting paragraphs on blank lines makes the entire document one passage. Paragraph boundaries come from geometry — vertical gaps, type size, column changes — not from punctuation alone.
+
+**PDFKit has two index systems and doesn't say so.** `page.string` counts line breaks; `characterBounds(at:)` and `characterIndex(at:)` don't. The drift grows through the page. Every lookup is verified against the expected text instead of trusting the arithmetic.
+
+**`characterIndex(at:)` returns `NSNotFound`, not `-1`,** for any tap that misses a glyph — margins, line gaps, the space between columns. Since people aim at paragraphs and not at letters, almost every tap misses. Falling back to "first passage on the page" made every tap start reading the journal header.
+
+**`AVSpeechSynthesisMarker.byteSampleOffset` is measured in bytes, despite the name.** Dividing by the sample rate alone inflates every timestamp by `bytesPerFrame` — a 5.42 s clip reported its last word at 18.3 s.
+
+**The terminal buffer callback fires twice.** Without an idempotency guard every passage lands in the cache twice.
+
+**PencilKit rasterizes at page resolution.** Ink drawn over a PDF blurs when you zoom — a [known limitation](https://developer.apple.com/forums/thread/792941) with no published fix. The notes layer draws its own vector ink instead, so strokes stay sharp at any zoom by construction.
+
+## Numbers
+
+Measured on this project, not estimated:
+
+| | |
+|---|---|
+| Speech synthesis | ~39× real time (M2), ~24× (M1 iPad Air 5) |
+| Cost of prefetching the next passage | ~4% of the current passage's duration |
+| Audio at 24 kbps AAC | 17 MB/hour — versus 311 MB/hour raw PCM |
+| An 8-hour book in cache | ~136 MB, versus ~2.5 GB uncompressed |
+| Language detection | ~6 ms per passage |
+| Passage highlight accuracy | 312/360 exact on real papers |
+
+## Architecture
 
 ```
-Sources/FastReadCore/      núcleo testável, sem UI
-  LanguageDetector         idioma do documento e por trecho
-  TextSegmenter            texto de PDF → trechos + mapa de índices
-  DocumentSegmenter        PDF → segmentos localizados
-  SpeechSynthesisEngine    síntese + markers → AAC
-  AlignmentBuilder         markers → tempos por palavra
-  SegmentCache             .m4a + .json em disco, com prune LRU
-  SegmentPipeline          cache, coalescing e prefetch
+Sources/FastReadCore/      testable core, no UI
+  LanguageDetector         document and per-passage language
+  PageLayoutAnalyzer       visual blocks from page geometry
+  TextSegmenter            PDF text → passages + index map back to the page
+  DocumentSegmenter        whole document → located passages
+  PageTextLocator          text indices ↔ page geometry, self-correcting
+  SpeechSynthesisEngine    synthesis + word markers → AAC
+  AlignmentBuilder         markers → per-word timings
+  SegmentCache             .m4a + .json on disk, LRU prune
+  SegmentPipeline          cache, request coalescing, cancellable prefetch
+  Ink / InkPath            stroke model and outline geometry
+  AnnotationStore          notes on disk, keyed by file content
 
-App/Sources/               app iPad (SwiftUI + PDFKit)
-Tests/FastReadCoreTests/   97 testes
+App/Sources/               iPad app (SwiftUI + PDFKit + CoreAnimation)
+Tests/FastReadCoreTests/   229 tests
+App/UITests/               12 UI tests
 ```
 
-O núcleo é um Swift Package para que os testes rodem em ~3 s sem simulador. O app depende dele.
+The core is a Swift package so the tests run in seconds without a simulator. The app depends on it.
 
-## Rodando
+**Ink is vector end to end.** Touches are captured with coalesced and predicted samples, carrying pressure, altitude, azimuth and roll. The geometry builds a closed *outline* of the stroke — variable width doesn't fit a fixed-width path — and it's filled by a `CAShapeLayer`, which is vector and hardware-accelerated.
+
+## Running
 
 ```bash
-swift test                 # 97 testes, ~3s
-xcodegen generate          # gera FastRead.xcodeproj a partir de project.yml
+swift test                 # 229 tests, ~7s
+xcodegen generate          # generates FastRead.xcodeproj from project.yml
 open FastRead.xcodeproj
 ```
 
-O `.xcodeproj` não é versionado — é derivado de `project.yml`.
+The `.xcodeproj` isn't versioned — it's derived from `project.yml`.
 
-## Qualidade da voz
+To run the core tests against your own PDFs:
 
-O sistema traz apenas vozes `compact` por padrão, que soam robóticas. As `enhanced`/`premium` são bem melhores e ficam em **Ajustes → Acessibilidade → Conteúdo Falado → Vozes**. É a maior melhoria de qualidade disponível, e não custa nada em código.
+```bash
+FASTREAD_SAMPLE_PDFS=/path/to/papers swift test
+```
 
-## Próximos passos
+Those tests skip when the variable isn't set. They assert invariants that only real documents expose: no passage swallows the article's opening, no passage ends on a split word, tapping the body doesn't resolve to the header.
 
-- Anotações com Apple Pencil (`PKCanvasView` sobre cada `PDFPage`, com `isInMarkupMode`)
-- Biblioteca de documentos com posição de leitura salva
-- Prune automático do cache por limite configurável
+## Voice quality
+
+iPadOS ships only `compact` voices, which sound robotic. The enhanced and premium ones are a free download and sound far better:
+
+**Settings → Accessibility → Read & Speak → Voices**
+
+The app picks the highest-quality installed voice on its own. It enumerates `speechVoices()` rather than calling `AVSpeechSynthesisVoice(language:)`, which sidesteps a [regression in iOS 26](https://developer.apple.com/forums/thread/804648) (FB20271264) where that API ignores the user's chosen voice.
+
+## Requirements
+
+- iPadOS 17+
+- Xcode 26, Swift 6
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+
+Built and tested on an iPad Air 5.
+
+## Known limitations
+
+- **Scanned PDFs don't work** — there's no selectable text to read. The app says so when it detects one.
+- **Display equations** interrupt a paragraph in about 1.3% of cases, and are filtered out of the speech rather than read aloud.
+- **Words split across pages** stay split; joining them would put text from two pages in one passage, and the highlight can only paint one.
+- **Two- and three-finger undo gestures** can't be verified in the simulator (`twoFingerTap` can't compute coordinates over a `PDFView`), so they're covered by the toolbar buttons and tested there.
+
+## License
+
+MIT
