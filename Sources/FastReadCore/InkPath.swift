@@ -161,13 +161,27 @@ public enum InkPath {
                              radius: Double) -> [InkStroke] {
         var pieces: [[InkPoint]] = []
         var current: [InkPoint] = []
+        let points = stroke.points
 
-        for point in stroke.points {
-            let distance = hypot(point.location.x - location.x, point.location.y - location.y)
-            if distance <= radius {
-                // Ponto apagado: fecha o pedaço em andamento e começa outro.
+        for (index, point) in points.enumerated() {
+            let touchesPoint = hypot(point.location.x - location.x,
+                                     point.location.y - location.y) <= radius
+
+            // O segmento até o próximo ponto também conta: uma borracha menor que o
+            // espaçamento das amostras passaria entre elas sem apagar nada.
+            let touchesSegment = index + 1 < points.count
+                && distance(from: location,
+                            segmentStart: point.location,
+                            segmentEnd: points[index + 1].location) <= radius
+
+            if touchesPoint || touchesSegment {
                 if current.count > 1 { pieces.append(current) }
                 current = []
+                // O ponto entra no pedaço anterior só se o segmento seguinte é que foi
+                // atingido — assim o corte fica onde a borracha passou, não antes.
+                if !touchesPoint, touchesSegment, pieces.isEmpty || current.isEmpty {
+                    current = []
+                }
             } else {
                 current.append(point)
             }

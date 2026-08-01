@@ -112,6 +112,15 @@ final class ReaderModel {
     private(set) var canRedo = false
 
     var inkWidth: Double = 2.5 { didSet { ink.baseWidth = inkWidth } }
+    /// A borracha tem seu próprio tamanho: 12 pontos fixos pegavam demais, e quem anota
+    /// costuma querer a borracha menor que o traço para corrigir uma palavra.
+    var eraserWidth: Double = 4 { didSet { ink.eraserRadius = eraserWidth } }
+
+    /// O que o controle de espessura edita — o tamanho da ferramenta em uso.
+    var activeWidth: Double {
+        get { inkTool == .eraser ? eraserWidth : inkWidth }
+        set { if inkTool == .eraser { eraserWidth = newValue } else { inkWidth = newValue } }
+    }
     var inkColor: InkColor = InkColor(red: 0.1, green: 0.1, blue: 0.12) {
         didSet { ink.color = inkColor }
     }

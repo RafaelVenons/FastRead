@@ -86,21 +86,28 @@ struct InkToolbar: View {
 
     private var espessura: some View {
         HStack(spacing: 8) {
-            // A amostra mostra a espessura real que vai sair, em vez de um número.
-            Circle()
-                .fill(swiftUIColor(model.inkColor))
-                .frame(width: amostra, height: amostra)
-                .frame(width: 22, height: 22)
-                .accessibilityIdentifier("widthPreview")
+            // A amostra mostra o tamanho real que vai sair, em vez de um número. Vazada
+            // para a borracha, cheia para a caneta: fica claro o que está sendo dimensionado.
+            Group {
+                if model.inkTool == .eraser {
+                    Circle().strokeBorder(.secondary, lineWidth: 1.5)
+                } else {
+                    Circle().fill(swiftUIColor(model.inkColor))
+                }
+            }
+            .frame(width: amostra, height: amostra)
+            .frame(width: 24, height: 24)
+            .accessibilityIdentifier("widthPreview")
 
-            Slider(value: $model.inkWidth, in: 0.5...12)
+            // O mesmo controle serve às duas ferramentas; cada uma lembra seu tamanho.
+            Slider(value: $model.activeWidth, in: 0.5...12)
                 .frame(width: 110)
                 .accessibilityIdentifier("widthSlider")
         }
     }
 
-    /// Limitada para o ponto de amostra não estourar a barra em espessuras grandes.
-    private var amostra: Double { min(4 + model.inkWidth * 1.4, 22) }
+    /// Limitada para o ponto de amostra não estourar a barra em tamanhos grandes.
+    private var amostra: Double { min(4 + model.activeWidth * 1.4, 24) }
 
     // MARK: - Histórico
 

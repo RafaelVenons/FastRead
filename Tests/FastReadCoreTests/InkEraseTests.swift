@@ -69,6 +69,24 @@ struct InkPartialEraseTests {
         restos = restos.flatMap { InkPath.erase($0, at: CGPoint(x: 70, y: 0), radius: 8) }
         #expect(restos.count == 3)
     }
+
+    /// Com a borracha menor que o espaçamento entre as amostras, medir a distância só aos
+    /// pontos a faz passar entre eles sem apagar nada. O que conta é a distância ao
+    /// traço — aos segmentos entre os pontos.
+    @Test("borracha menor que o espaçamento ainda corta o traço")
+    func cortaEntrePontos() {
+        // pontos a cada 10; borracha de raio 3 cai no vão entre dois deles
+        let restos = InkPath.erase(linha(), at: CGPoint(x: 45, y: 0), radius: 3)
+        #expect(restos.count == 2, "a borracha passou entre os pontos sem cortar")
+    }
+
+    @Test("um pouco fora do traço não corta")
+    func foraDoTracoNaoCorta() {
+        // mesma posição, mas afastada o suficiente na vertical
+        let restos = InkPath.erase(linha(), at: CGPoint(x: 45, y: 30), radius: 3)
+        #expect(restos.count == 1)
+        #expect(restos[0].points.count == linha().points.count)
+    }
 }
 
 @Suite("Borracha no desenho")
@@ -120,5 +138,31 @@ struct InkDrawingEraseTests {
         d.erase(at: CGPoint(x: 900, y: 900), radius: 10)
         d.undo()
         #expect(d.strokes.count != antesDoUndo || d.strokes.count == antesDoUndo)
+    }
+
+    /// Relatado em uso: a borracha pegava demais. Com raio pequeno ela precisa distinguir
+    /// traços vizinhos, senão apagar um leva o outro junto.
+    @Test("raio menor apaga menos")
+    func raioMenorApagaMenos() {
+        let largo = InkPath.erase(linha(), at: CGPoint(x: 50, y: 0), radius: 25)
+        let estreito = InkPath.erase(linha(), at: CGPoint(x: 50, y: 0), radius: 6)
+
+        let restantesLargo = largo.reduce(0) { $0 + $1.points.count }
+        let restantesEstreito = estreito.reduce(0) { $0 + $1.points.count }
+        #expect(restantesEstreito > restantesLargo)
+    }
+
+    @Test("borracha fina não atinge o traço vizinho")
+    func naoAtingeVizinho() {
+        var d = InkDrawing()
+        d.append(linha())                                        // em y = 0
+        d.append(InkStroke(points: (0...10).map { point(Double($0) * 10, 20) },
+                           color: .black, baseWidth: 3))          // em y = 20
+
+        d.erase(at: CGPoint(x: 50, y: 0), radius: 6)
+
+        // o de cima foi partido; o de baixo continua inteiro
+        #expect(d.strokes.contains { $0.points.count == 11 },
+                "a borracha fina atingiu o traço vizinho")
     }
 }
