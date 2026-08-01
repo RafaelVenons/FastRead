@@ -67,11 +67,12 @@ Sources/FastReadCore/      testable core, no UI
   AlignmentBuilder         markers → per-word timings
   SegmentCache             .m4a + .json on disk, LRU prune
   SegmentPipeline          cache, request coalescing, cancellable prefetch
+  MathFilter               display equations out of the spoken text
   Ink / InkPath            stroke model and outline geometry
   AnnotationStore          notes on disk, keyed by file content
 
 App/Sources/               iPad app (SwiftUI + PDFKit + CoreAnimation)
-Tests/FastReadCoreTests/   229 tests
+Tests/FastReadCoreTests/   246 tests
 App/UITests/               12 UI tests
 ```
 
@@ -82,7 +83,7 @@ The core is a Swift package so the tests run in seconds without a simulator. The
 ## Running
 
 ```bash
-swift test                 # 229 tests, ~7s
+swift test                 # 246 tests, ~4s
 xcodegen generate          # generates FastRead.xcodeproj from project.yml
 open FastRead.xcodeproj
 ```
@@ -95,7 +96,7 @@ To run the core tests against your own PDFs:
 FASTREAD_SAMPLE_PDFS=/path/to/papers swift test
 ```
 
-Those tests skip when the variable isn't set. They assert invariants that only real documents expose: no passage swallows the article's opening, no passage ends on a split word, tapping the body doesn't resolve to the header.
+Those tests skip when the variable isn't set. They assert invariants that only real documents expose: no passage swallows the article's opening, no passage ends on a split word, no paragraph gets cut in the middle, no spoken passage contains a formula, tapping the body doesn't resolve to the header.
 
 ## Voice quality
 
@@ -116,7 +117,7 @@ Built and tested on an iPad Air 5.
 ## Known limitations
 
 - **Scanned PDFs don't work** — there's no selectable text to read. The app says so when it detects one.
-- **Display equations** interrupt a paragraph in about 1.3% of cases, and are filtered out of the speech rather than read aloud.
+- **Display equations are skipped, not read.** A formula is removed from the passage and the prose around it is joined back together, so the voice reads through the paragraph instead of reciting notation. Deciding what is a formula is a heuristic: it takes two or more consecutive mathematical tokens *and* a strong signal — an operator or a Greek letter — so a lone `R` or `m` in prose survives.
 - **Words split across pages** stay split; joining them would put text from two pages in one passage, and the highlight can only paint one.
 - **Two- and three-finger gestures work on device but can't be tested automatically** — `twoFingerTap` can't compute coordinates over a `PDFView`. The toolbar buttons cover the same actions and are tested.
 
