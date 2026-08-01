@@ -23,6 +23,7 @@ Built for reading scientific papers — two-column layouts, journal headers, hyp
 | **Language detection** | Per document, with a per-passage override when the evidence is strong |
 | **Voice picker** | Lists installed voices with their quality, and tells you how to download better ones |
 | **Handwritten notes** | Apple Pencil, pressure-sensitive, vector from capture to screen |
+| **Procreate-style gestures** | Two fingers to undo, three to redo, while you write |
 
 ## What made this hard
 
@@ -117,7 +118,7 @@ Built and tested on an iPad Air 5.
 - **Scanned PDFs don't work** — there's no selectable text to read. The app says so when it detects one.
 - **Display equations** interrupt a paragraph in about 1.3% of cases, and are filtered out of the speech rather than read aloud.
 - **Words split across pages** stay split; joining them would put text from two pages in one passage, and the highlight can only paint one.
-- **Two- and three-finger undo gestures** can't be verified in the simulator (`twoFingerTap` can't compute coordinates over a `PDFView`), so they're covered by the toolbar buttons and tested there.
+- **Two- and three-finger gestures work on device but can't be tested automatically** — `twoFingerTap` can't compute coordinates over a `PDFView`. The toolbar buttons cover the same actions and are tested.
 
 ## License
 
