@@ -54,12 +54,36 @@ final class InkCanvasView: UIView {
         setUp()
     }
 
+    /// Desfazer e refazer por gesto, como no Procreate.
+    var onUndoGesture: (() -> Void)?
+    var onRedoGesture: (() -> Void)?
+
+    private func setUpGestures() {
+        let undo = UITapGestureRecognizer(target: self, action: #selector(handleUndoGesture))
+        undo.numberOfTouchesRequired = 2
+
+        let redo = UITapGestureRecognizer(target: self, action: #selector(handleRedoGesture))
+        redo.numberOfTouchesRequired = 3
+
+        // Sem isto o toque de três dedos dispara os dois: o de dois reconhece primeiro.
+        undo.require(toFail: redo)
+
+        for gesture in [undo, redo] {
+            gesture.delegate = self
+            addGestureRecognizer(gesture)
+        }
+    }
+
+    @objc private func handleUndoGesture() { onUndoGesture?() }
+    @objc private func handleRedoGesture() { onRedoGesture?() }
+
     private func setUp() {
         backgroundColor = .clear
         isOpaque = false
         isUserInteractionEnabled = false
-        isMultipleTouchEnabled = false
+        isMultipleTouchEnabled = true
         accessibilityIdentifier = "inkCanvas"
+        setUpGestures()
 
         for shape in [settledLayer, activeLayer] {
             shape.fillColor = UIColor.black.cgColor
@@ -120,16 +144,16 @@ final class InkCanvasView: UIView {
         finishStroke()
     }
 
-    /// Apaga o traço sob o ponto — inteiro, não em pedaços: é o que se espera de uma
-    /// borracha de anotação, e apagar parcialmente exigiria recortar a geometria.
+    /// Apaga só o que passou sob a borracha, partindo o traço se for no meio.
     private func erase(at location: CGPoint) {
-        guard let index = InkPath.strokeIndex(at: location, in: drawing.strokes,
-                                              tolerance: eraserTolerance) else { return }
-        drawing.remove(at: index)
+        let antes = drawing.strokes
+        drawing.erase(at: location, radius: eraserRadius)
+        guard drawing.strokes != antes else { return }
         onStrokeFinished?(InkStroke(points: [], color: color, baseWidth: baseWidth))
     }
 
-    private let eraserTolerance: Double = 10
+    /// Alcance da borracha, em pontos da página.
+    var eraserRadius: Double = 12
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         activePoints.removeAll()
@@ -146,7 +170,9 @@ final class InkCanvasView: UIView {
     }
 
     private func usableTouch(_ touches: Set<UITouch>) -> UITouch? {
-        touches.first { $0.type == .pencil || acceptsFingerInput }
+        // Dois ou mais dedos são gesto, não traço.
+        guard touches.count == 1 else { return nil }
+        return touches.first { $0.type == .pencil || acceptsFingerInput }
     }
 
     private func inkPoint(from touch: UITouch) -> InkPoint {
@@ -233,5 +259,20 @@ final class InkCanvasView: UIView {
 
     private func cgColor(_ color: InkColor) -> CGColor {
         UIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha).cgColor
+    }
+}
+
+extension InkCanvasView: UIGestureRecognizerDelegate {
+
+    /// Convive com os gestos do PDFView, que também querem o multi-toque.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    /// A caneta desenha; desfazer e refazer são dos dedos.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldReceive touch: UITouch) -> Bool {
+        touch.type != .pencil
     }
 }

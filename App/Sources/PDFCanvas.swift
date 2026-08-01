@@ -38,7 +38,8 @@ struct PDFCanvas: UIViewRepresentable {
         view.displayDirection = .vertical
         view.usePageViewController(false)
         view.backgroundColor = .secondarySystemBackground
-        view.isAccessibilityElement = true
+        // Sem `isAccessibilityElement`: marcá-lo como folha impede o XCUITest de calcular
+        // pontos internos, e gestos de vários dedos deixam de ser testáveis.
         view.accessibilityIdentifier = "pdfCanvas"
 
         let tap = UITapGestureRecognizer(target: context.coordinator,

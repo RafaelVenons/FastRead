@@ -203,14 +203,18 @@ final class ReaderUITests: XCTestCase {
         app.buttons["drawToggle"].tap()
 
         // Relatado em uso: não havia como escolher cor, espessura ou borracha.
-        for ferramenta in ["toolPen", "toolEraser", "color-blue", "color-red",
-                           "width-fine", "width-bold", "undo", "redo"] {
-            XCTAssertTrue(app.buttons[ferramenta].waitForExistence(timeout: 5),
-                          "\(ferramenta) não está na barra")
+        for botao in ["toolPen", "toolEraser", "color-blue", "color-red", "undo", "redo"] {
+            XCTAssertTrue(app.buttons[botao].waitForExistence(timeout: 5),
+                          "\(botao) não está na barra")
         }
+        // Espessura contínua e ciclo cromático, em vez de valores predefinidos.
+        XCTAssertTrue(app.sliders["widthSlider"].waitForExistence(timeout: 5),
+                      "não há controle contínuo de espessura")
+        XCTAssertTrue(app.colorWells["colorWheel"].exists || app.buttons["colorWheel"].exists,
+                      "não há ciclo cromático para escolher qualquer cor")
     }
 
-    func testBorrachaApagaOTraco() throws {
+    func testBorrachaApagaSoOTrechoTocado() throws {
         let app = launchApp()
         let pdf = app.otherElements["pdfCanvas"]
         XCTAssertTrue(pdf.waitForExistence(timeout: 10))
@@ -219,16 +223,47 @@ final class ReaderUITests: XCTestCase {
         let status = app.staticTexts["drawStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 5))
 
-        let inicio = pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.45))
-        let fim = pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.45))
-        inicio.press(forDuration: 0.15, thenDragTo: fim)
-        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) >= 1 })
+        // um traço longo atravessando a página
+        pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.45))
+            .press(forDuration: 0.15,
+                   thenDragTo: pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.45)))
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) == 1 })
 
+        // apaga no meio: deve partir em dois, não sumir
         app.buttons["toolEraser"].tap()
         pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
 
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) == 2 },
+                      "a borracha não partiu o traço: \(status.label)")
+    }
+
+    /// Os gestos de dois e três dedos estão implementados com requisito de falha contra
+    /// o pan do scroll e `delaysContentTouches` desligado, mas o XCUITest não consegue
+    /// computar coordenadas para `twoFingerTap` nesta hierarquia — falha com "unable to
+    /// compute coordinates" mesmo com o frame inteiro visível. Fica registrado como
+    /// verificável só no dispositivo, em vez de fingir cobertura.
+    func testDesfazerPorGestoDeDoisDedos() throws {
+        throw XCTSkip("twoFingerTap não é computável sobre o PDFView; verificar no iPad")
+    }
+
+    private func testDesfazerPorGestoDeDoisDedos_manual() throws {
+        let app = launchApp()
+        let pdf = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(pdf.waitForExistence(timeout: 10))
+        app.buttons["drawToggle"].tap()
+
+        let status = app.staticTexts["drawStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+            .press(forDuration: 0.15,
+                   thenDragTo: pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)))
+        XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) >= 1 })
+
+        // O twoFingerTap precisa de um elemento com ponto calculável; o pdfCanvas é um
+        // elemento de acessibilidade único e não serve.
+        app.windows.firstMatch.twoFingerTap()
         XCTAssertTrue(Self.aguarda(ate: 8) { Self.tracos(em: status.label) == 0 },
-                      "a borracha não apagou: \(status.label)")
+                      "dois dedos não desfizeram: \(status.label)")
     }
 
     // MARK: - Auxiliares

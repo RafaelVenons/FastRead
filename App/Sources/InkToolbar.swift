@@ -9,26 +9,22 @@ struct InkToolbar: View {
 
     @Bindable var model: ReaderModel
 
-    private static let palette: [(name: String, color: InkColor)] = [
+    /// Atalhos para as cores mais usadas. O ciclo cromático completo fica ao lado, para
+    /// qualquer outra — a paleta fixa é conveniência, não limite.
+    private static let shortcuts: [(name: String, color: InkColor)] = [
         ("black", InkColor(red: 0.1, green: 0.1, blue: 0.12)),
         ("blue", InkColor(red: 0.0, green: 0.35, blue: 0.9)),
         ("red", InkColor(red: 0.85, green: 0.15, blue: 0.15)),
-        ("green", InkColor(red: 0.1, green: 0.6, blue: 0.25)),
-        ("yellow", InkColor(red: 0.95, green: 0.75, blue: 0.1, alpha: 0.45)),
-    ]
-
-    private static let widths: [(name: String, value: Double)] = [
-        ("fine", 1.2), ("medium", 2.5), ("bold", 5),
     ]
 
     var body: some View {
-        HStack(spacing: 14) {
-            caneta
-            Divider().frame(height: 22)
+        HStack(spacing: 12) {
+            ferramenta
+            Divider().frame(height: 24)
             cores
-            Divider().frame(height: 22)
-            espessuras
-            Divider().frame(height: 22)
+            Divider().frame(height: 24)
+            espessura
+            Divider().frame(height: 24)
             historico
         }
         .padding(.horizontal, 14)
@@ -37,8 +33,10 @@ struct InkToolbar: View {
         .overlay(Capsule().strokeBorder(.quaternary))
     }
 
-    private var caneta: some View {
-        HStack(spacing: 8) {
+    // MARK: - Ferramenta
+
+    private var ferramenta: some View {
+        HStack(spacing: 6) {
             botao("applepencil.tip", ativo: model.inkTool == .pen, id: "toolPen") {
                 model.inkTool = .pen
             }
@@ -48,56 +46,74 @@ struct InkToolbar: View {
         }
     }
 
+    // MARK: - Cor
+
     private var cores: some View {
         HStack(spacing: 8) {
-            ForEach(Self.palette, id: \.name) { item in
+            ForEach(Self.shortcuts, id: \.name) { item in
                 Button {
                     model.inkColor = item.color
                     model.inkTool = .pen
                 } label: {
                     Circle()
-                        .fill(Color(red: item.color.red, green: item.color.green,
-                                    blue: item.color.blue).opacity(item.color.alpha))
+                        .fill(swiftUIColor(item.color))
                         .frame(width: 22, height: 22)
-                        .overlay(
-                            Circle().strokeBorder(.primary,
-                                                  lineWidth: model.inkColor == item.color ? 2 : 0)
-                        )
+                        .overlay(Circle().strokeBorder(.primary,
+                                                       lineWidth: model.inkColor == item.color ? 2 : 0))
                 }
                 .accessibilityIdentifier("color-\(item.name)")
             }
+
+            // Ciclo cromático do sistema: qualquer cor, com opacidade.
+            ColorPicker("notes.color", selection: colorBinding, supportsOpacity: true)
+                .labelsHidden()
+                .frame(width: 26, height: 26)
+                .accessibilityIdentifier("colorWheel")
         }
     }
 
-    private var espessuras: some View {
-        HStack(spacing: 8) {
-            ForEach(Self.widths, id: \.name) { item in
-                Button {
-                    model.inkWidth = item.value
-                } label: {
-                    // O ponto mostra a espessura que vai sair, em vez de um rótulo.
-                    Circle()
-                        .fill(.primary)
-                        .frame(width: 4 + item.value * 1.6, height: 4 + item.value * 1.6)
-                        .frame(width: 24, height: 24)
-                        .background(
-                            Circle().fill(model.inkWidth == item.value
-                                          ? Color.accentColor.opacity(0.2) : .clear)
-                        )
-                }
-                .accessibilityIdentifier("width-\(item.name)")
+    private var colorBinding: Binding<Color> {
+        Binding(
+            get: { swiftUIColor(model.inkColor) },
+            set: { novo in
+                model.inkColor = inkColor(from: novo)
+                model.inkTool = .pen
             }
+        )
+    }
+
+    // MARK: - Espessura
+
+    private var espessura: some View {
+        HStack(spacing: 8) {
+            // A amostra mostra a espessura real que vai sair, em vez de um número.
+            Circle()
+                .fill(swiftUIColor(model.inkColor))
+                .frame(width: amostra, height: amostra)
+                .frame(width: 22, height: 22)
+                .accessibilityIdentifier("widthPreview")
+
+            Slider(value: $model.inkWidth, in: 0.5...12)
+                .frame(width: 110)
+                .accessibilityIdentifier("widthSlider")
         }
     }
+
+    /// Limitada para o ponto de amostra não estourar a barra em espessuras grandes.
+    private var amostra: Double { min(4 + model.inkWidth * 1.4, 22) }
+
+    // MARK: - Histórico
 
     private var historico: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             botao("arrow.uturn.backward", ativo: false, id: "undo",
                   desabilitado: !model.canUndo) { model.ink.undo() }
             botao("arrow.uturn.forward", ativo: false, id: "redo",
                   desabilitado: !model.canRedo) { model.ink.redo() }
         }
     }
+
+    // MARK: - Auxiliares
 
     private func botao(_ symbol: String, ativo: Bool, id: String,
                        desabilitado: Bool = false, action: @escaping () -> Void) -> some View {
@@ -110,5 +126,21 @@ struct InkToolbar: View {
         }
         .disabled(desabilitado)
         .accessibilityIdentifier(id)
+    }
+
+    private func swiftUIColor(_ color: InkColor) -> Color {
+        Color(red: color.red, green: color.green, blue: color.blue).opacity(color.alpha)
+    }
+
+    private func inkColor(from color: Color) -> InkColor {
+        let components = UIColor(color).cgColor.components ?? [0, 0, 0, 1]
+        // Cinzas vêm com dois componentes (branco e alfa) em vez de quatro.
+        if components.count < 4 {
+            let white = Double(components.first ?? 0)
+            return InkColor(red: white, green: white, blue: white,
+                            alpha: Double(components.last ?? 1))
+        }
+        return InkColor(red: Double(components[0]), green: Double(components[1]),
+                        blue: Double(components[2]), alpha: Double(components[3]))
     }
 }

@@ -151,6 +151,35 @@ public enum InkPath {
         return hypot(point.x - projected.x, point.y - projected.y)
     }
 
+    /// Remove de um traço a parte que passou sob a borracha, devolvendo os pedaços que
+    /// sobraram.
+    ///
+    /// Apagar o traço inteiro é grosseiro demais para anotação: uma palavra errada no
+    /// meio de uma frase obrigaria a refazer tudo. Um apagamento no meio parte o traço
+    /// em dois; nas pontas, apenas encurta.
+    public static func erase(_ stroke: InkStroke, at location: CGPoint,
+                             radius: Double) -> [InkStroke] {
+        var pieces: [[InkPoint]] = []
+        var current: [InkPoint] = []
+
+        for point in stroke.points {
+            let distance = hypot(point.location.x - location.x, point.location.y - location.y)
+            if distance <= radius {
+                // Ponto apagado: fecha o pedaço em andamento e começa outro.
+                if current.count > 1 { pieces.append(current) }
+                current = []
+            } else {
+                current.append(point)
+            }
+        }
+        if current.count > 1 { pieces.append(current) }
+
+        // Pedaços de um ponto só não desenham nada e virariam lixo no modelo.
+        return pieces.map {
+            InkStroke(points: $0, color: stroke.color, baseWidth: stroke.baseWidth)
+        }
+    }
+
     // MARK: - Contorno
 
     /// Contorno fechado do traço, pronto para preencher.

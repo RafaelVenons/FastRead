@@ -51,3 +51,4 @@
 "notes.width.bold" = "Bold";
 "notes.clearPage" = "Erase notes on this page";
 "notes.clearAll" = "Erase all notes in this document";
+"notes.color" = "Ink color";

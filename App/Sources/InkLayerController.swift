@@ -39,6 +39,10 @@ final class InkLayerController: NSObject, @preconcurrency PDFPageOverlayViewProv
         didSet { canvases.values.forEach { $0.tool = tool } }
     }
 
+    var eraserRadius: Double = 12 {
+        didSet { canvases.values.forEach { $0.eraserRadius = eraserRadius } }
+    }
+
     /// O simulador não tem Pencil; os testes de interface liberam o dedo por variável.
     private let acceptsFinger = ProcessInfo.processInfo.environment["FASTREAD_FINGER_DRAWING"] == "1"
 
@@ -71,6 +75,9 @@ final class InkLayerController: NSObject, @preconcurrency PDFPageOverlayViewProv
             self?.persist(page: index)
             self?.onChange?()
         }
+        canvas.onUndoGesture = { [weak self] in self?.undo() }
+        canvas.onRedoGesture = { [weak self] in self?.redo() }
+        canvas.eraserRadius = eraserRadius
 
         if let document, let data = store.load(document: document, page: index),
            let saved = try? JSONDecoder().decode(InkDrawing.self, from: data) {
@@ -108,6 +115,9 @@ final class InkLayerController: NSObject, @preconcurrency PDFPageOverlayViewProv
         for case let scroll as UIScrollView in pdfView.subviews {
             scroll.isScrollEnabled = enabled
             scroll.panGestureRecognizer.isEnabled = enabled
+            // O scroll atrasa os toques por padrão, o que engole o toque de dois e três
+            // dedos antes de o reconhecedor vê-lo.
+            scroll.delaysContentTouches = enabled
         }
     }
 

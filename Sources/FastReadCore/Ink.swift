@@ -99,15 +99,22 @@ public struct InkDrawing: Codable, Sendable, Equatable {
         strokes.append(stroke)
         // Traço novo encerra a linha do tempo alternativa, como em qualquer editor.
         undone.removeAll()
+        snapshots.removeAll()
         lastActionWasRemoval = false
     }
 
     /// Também é possível desfazer logo após apagar, mesmo sem traços restantes.
-    public var canUndo: Bool { !strokes.isEmpty || !undone.isEmpty }
+    public var canUndo: Bool { !strokes.isEmpty || !undone.isEmpty || !snapshots.isEmpty }
     public var canRedo: Bool { !undone.isEmpty }
 
     public mutating func undo() {
-        // Depois de apagar, desfazer restaura o que foi apagado em vez de remover outro.
+        // Um apagamento é desfeito restaurando o estado anterior inteiro: os traços
+        // atingidos voltam como eram, não como pedaços.
+        if let previous = snapshots.popLast() {
+            strokes = previous
+            return
+        }
+        // Depois de remover um traço inteiro, desfazer o traz de volta.
         if lastActionWasRemoval, let restored = undone.popLast() {
             strokes.append(restored)
             lastActionWasRemoval = false
@@ -130,9 +137,36 @@ public struct InkDrawing: Codable, Sendable, Equatable {
         lastActionWasRemoval = true
     }
 
+    /// Apaga o que passou sob a borracha, partindo os traços atingidos.
+    ///
+    /// Guarda o estado anterior inteiro para que desfazer restaure os traços originais,
+    /// e não os pedaços.
+    public mutating func erase(at location: CGPoint, radius: Double) {
+        var changed = false
+        var result: [InkStroke] = []
+
+        for stroke in strokes {
+            let pieces = InkPath.erase(stroke, at: location, radius: radius)
+            if pieces.count != 1 || pieces[0].points.count != stroke.points.count {
+                changed = true
+            }
+            result.append(contentsOf: pieces)
+        }
+
+        guard changed else { return }
+        snapshots.append(strokes)
+        strokes = result
+        undone.removeAll()
+        lastActionWasRemoval = false
+    }
+
+    /// Estados anteriores a apagamentos, para desfazer restaurar o traço original.
+    private var snapshots: [[InkStroke]] = []
+
     public mutating func removeAll() {
         strokes.removeAll()
         undone.removeAll()
+        snapshots.removeAll()
         lastActionWasRemoval = false
     }
 }
