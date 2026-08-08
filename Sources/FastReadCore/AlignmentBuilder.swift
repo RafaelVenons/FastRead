@@ -30,14 +30,28 @@ public enum AlignmentBuilder {
     ///   índice de sample. Dividir apenas pelo sample rate infla todos os tempos por
     ///   `bytesPerFrame` (4× no formato das vozes do sistema): o último marker de um
     ///   áudio de 5,42 s aparecia em 18,297 s antes da correção.
+    /// - Parameter totalBytes: bytes de PCM efetivamente recebidos. Quando maior que
+    ///   zero, é ele que define a escala de tempo, e não `format.bytesPerFrame`: o
+    ///   formato é lido do primeiro buffer e nem toda voz entrega o mesmo. Declarar
+    ///   menos bytes por frame do que chegam infla todos os tempos na mesma proporção,
+    ///   e o realce fica parado numa palavra anterior enquanto o áudio segue.
     public static func build(
         text: String,
         markers: [RawMarker],
         format: AudioFormatInfo,
-        totalFrames: Int64
+        totalFrames: Int64,
+        totalBytes: Int64 = 0
     ) -> SegmentAlignment {
 
-        let bytesPerSecond = format.sampleRate * format.bytesPerFrame
+        let duration = format.sampleRate > 0 ? Double(totalFrames) / format.sampleRate : 0
+
+        // Medido vence declarado; sem medição, o formato declarado ainda serve.
+        let bytesPerSecond: Double
+        if totalBytes > 0, duration > 0 {
+            bytesPerSecond = Double(totalBytes) / duration
+        } else {
+            bytesPerSecond = format.sampleRate * format.bytesPerFrame
+        }
         let nsText = text as NSString
 
         let words: [WordTiming] = markers.compactMap { marker in
@@ -56,7 +70,6 @@ public enum AlignmentBuilder {
         }
         .sorted { $0.start < $1.start }
 
-        let duration = format.sampleRate > 0 ? Double(totalFrames) / format.sampleRate : 0
         return SegmentAlignment(words: words, duration: duration)
     }
 }

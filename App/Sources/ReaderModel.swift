@@ -36,6 +36,10 @@ final class ReaderModel {
         var actualHighlight: String
         var wordExpected: String
         var wordActual: String
+        /// Saúde do alinhamento do trecho em reprodução: quantas palavras vieram e até
+        /// onde o último marker chega no áudio. Cobertura baixa é realce que trava numa
+        /// palavra anterior enquanto a voz segue.
+        var alignment: String = "—"
     }
 
     var diagnosticsEnabled = false
@@ -253,6 +257,18 @@ final class ReaderModel {
                                    voiceIdentifier: selectedVoiceIdentifier))
 
                 guard currentIndex == index else { return }   // o usuário tocou em outro
+
+                if diagnosticsEnabled {
+                    let palavras = cached.alignment.words
+                    let esperadas = segment.text.split(whereSeparator: { $0 == " " }).count
+                    let fim = palavras.last?.start ?? 0
+                    let cobertura = cached.alignment.duration > 0
+                        ? fim / cached.alignment.duration : 0
+                    diagnostics?.alignment = String(
+                        format: "%d/%d palavras · cobre %.0f%% de %.1fs",
+                        palavras.count, esperadas, cobertura * 100, cached.alignment.duration)
+                }
+
                 let startTime = startAt.flatMap { cached.alignment.time(atTextIndex: $0) } ?? 0
                 player.play(url: cached.audioURL,
                             alignment: snapshot(of: cached.alignment),

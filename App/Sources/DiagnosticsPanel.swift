@@ -26,6 +26,7 @@ struct DiagnosticsPanel: View {
             linha(String(localized: "diag.chosenPassage"),
                   info.segmentID.map { "#\($0)  \(info.segmentRange)" } ?? String(localized: "diag.none"))
             linha(String(localized: "diag.passageStarts"), info.segmentHead)
+            linha(String(localized: "diag.alignment"), info.alignment, mono: true)
 
             Divider()
 

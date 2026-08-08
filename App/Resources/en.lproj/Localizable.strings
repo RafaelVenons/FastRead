@@ -37,6 +37,7 @@
 "diag.tapLanded" = "tap landed on";
 "diag.chosenPassage" = "chosen passage";
 "diag.passageStarts" = "passage starts with";
+"diag.alignment" = "alignment";
 "diag.shouldHighlight" = "should highlight";
 "diag.didHighlight" = "did highlight";
 "diag.wordInVoice" = "word in voice";

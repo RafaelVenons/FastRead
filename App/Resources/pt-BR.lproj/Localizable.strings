@@ -37,6 +37,7 @@
 "diag.tapLanded" = "toque caiu em";
 "diag.chosenPassage" = "trecho escolhido";
 "diag.passageStarts" = "trecho começa com";
+"diag.alignment" = "alinhamento";
 "diag.shouldHighlight" = "deveria acender";
 "diag.didHighlight" = "acendeu de fato";
 "diag.wordInVoice" = "palavra na voz";

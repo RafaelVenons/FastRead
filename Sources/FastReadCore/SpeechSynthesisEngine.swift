@@ -121,6 +121,7 @@ private final class Session: NSObject, AVSpeechSynthesizerDelegate, @unchecked S
     private var audioFile: AVAudioFile?
     private var format: AudioFormatInfo?
     private var totalFrames: Int64 = 0
+    private var totalBytes: Int64 = 0
     private var completion: ((Result<SynthesizedSegment, Error>) -> Void)?
     private let lock = NSLock()
 
@@ -197,6 +198,9 @@ private final class Session: NSObject, AVSpeechSynthesizerDelegate, @unchecked S
 
         lock.lock()
         totalFrames += Int64(pcm.frameLength)
+        // Conta os bytes com o formato de cada buffer, não com o do primeiro: é esta
+        // medida que dá a escala de tempo dos markers.
+        totalBytes += Int64(pcm.frameLength) * Int64(pcm.format.streamDescription.pointee.mBytesPerFrame)
         lock.unlock()
     }
 
@@ -205,6 +209,7 @@ private final class Session: NSObject, AVSpeechSynthesizerDelegate, @unchecked S
         let collected = markers
         let capturedFormat = format
         let frames = totalFrames
+        let bytes = totalBytes
         lock.unlock()
 
         guard let capturedFormat, frames > 0 else {
@@ -213,7 +218,8 @@ private final class Session: NSObject, AVSpeechSynthesizerDelegate, @unchecked S
         }
 
         let alignment = AlignmentBuilder.build(text: text, markers: collected,
-                                               format: capturedFormat, totalFrames: frames)
+                                               format: capturedFormat, totalFrames: frames,
+                                               totalBytes: bytes)
         finish(.success(SynthesizedSegment(audioURL: outputURL, alignment: alignment)))
     }
 

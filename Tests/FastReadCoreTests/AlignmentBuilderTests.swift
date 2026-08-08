@@ -118,6 +118,81 @@ struct AlignmentBuilderTests {
     }
 }
 
+/// O formato vem do primeiro buffer, e nem toda voz entrega o que a do Mac entrega.
+/// Se `bytesPerFrame` não descrever o fluxo de verdade, todos os tempos escalam por uma
+/// constante — e tempo grande demais faz o realce ficar parado numa palavra anterior
+/// enquanto o áudio segue. Contar os bytes que chegaram dispensa a suposição.
+@Suite("AlignmentBuilder calibrado pelos bytes recebidos")
+struct AlignmentByteCalibrationTests {
+
+    /// 1 s de áudio = 22050 frames; float32 mono = 88200 bytes.
+    private let umSegundoDeBytes: Int64 = 88_200
+
+    @Test("com formato coerente, o resultado não muda")
+    func formatoCoerente() {
+        let a = AlignmentBuilder.build(
+            text: "um dois",
+            markers: [RawMarker(byteSampleOffset: 88_200, range: NSRange(location: 0, length: 2))],
+            format: formato,
+            totalFrames: 44_100,
+            totalBytes: umSegundoDeBytes * 2)
+
+        #expect(abs(a.words[0].start - 1.0) < 0.0001)
+    }
+
+    /// O caso do dispositivo: o buffer diz 2 bytes por frame, mas chegaram 4. Sem
+    /// calibrar, cada tempo sai o dobro do real e o realce atrasa.
+    @Test("bytes recebidos mandam sobre o formato declarado")
+    func bytesMandamSobreFormato() {
+        let declaradoErrado = AudioFormatInfo(sampleRate: 22050, bytesPerFrame: 2)
+
+        let a = AlignmentBuilder.build(
+            text: "um dois",
+            markers: [RawMarker(byteSampleOffset: 88_200, range: NSRange(location: 0, length: 2))],
+            format: declaradoErrado,
+            totalFrames: 44_100,
+            totalBytes: umSegundoDeBytes * 2)
+
+        #expect(abs(a.words[0].start - 1.0) < 0.0001, "start=\(a.words[0].start), esperado 1 s")
+    }
+
+    /// Invariante: uma palavra não pode começar depois do áudio acabar.
+    @Test("nenhuma palavra começa depois do fim do áudio")
+    func nenhumaDepoisDoFim() {
+        let declaradoErrado = AudioFormatInfo(sampleRate: 22050, bytesPerFrame: 1)
+
+        let a = AlignmentBuilder.build(
+            text: "um dois tres",
+            markers: [
+                RawMarker(byteSampleOffset: 0, range: NSRange(location: 0, length: 2)),
+                RawMarker(byteSampleOffset: 88_200, range: NSRange(location: 3, length: 4)),
+                RawMarker(byteSampleOffset: 158_760, range: NSRange(location: 8, length: 4)),
+            ],
+            format: declaradoErrado,
+            totalFrames: 44_100,
+            totalBytes: umSegundoDeBytes * 2)
+
+        #expect(a.duration > 0)
+        for w in a.words {
+            #expect(w.start <= a.duration, "'\(w.word)' começa em \(w.start) e o áudio dura \(a.duration)")
+        }
+    }
+
+    /// Sem contagem de bytes — chamada antiga, ou sessão que não a coletou — o formato
+    /// declarado continua valendo.
+    @Test("sem contagem de bytes, cai no formato declarado")
+    func semContagem() {
+        let a = AlignmentBuilder.build(
+            text: "um dois",
+            markers: [RawMarker(byteSampleOffset: 88_200, range: NSRange(location: 0, length: 2))],
+            format: formato,
+            totalFrames: 44_100,
+            totalBytes: 0)
+
+        #expect(abs(a.words[0].start - 1.0) < 0.0001)
+    }
+}
+
 @Suite("TerminationGuard")
 struct TerminationGuardTests {
 
