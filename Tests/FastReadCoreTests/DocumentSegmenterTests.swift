@@ -182,6 +182,32 @@ struct DocumentSegmenterTests {
                                    NSRange(location: 30, length: 3)])
     }
 
+    /// Nem todo salto no mapa é conteúdo removido. Medido no corpus: 31 buracos de dois
+    /// caracteres, todos `"-\n"` — o hífen de quebra de linha, que sai da fala mas está
+    /// ali na página — e dois de um caractere, `"\n"`. A fórmula do trecho vizinho deixa
+    /// buraco de dez. Partir o realce naqueles o estilhaça em toda palavra hifenizada, e
+    /// cada pedaço ainda passa pela autocorreção do localizador por conta própria.
+    @Test("hífen de quebra de linha não parte o realce")
+    func hifenNaoParte() {
+        // "aa" em 10..11, o hífen e a quebra em 12..13, "bb" em 14..15
+        let seg = DocumentSegment(
+            id: 0, pageIndex: 0,
+            segment: MappedSegment(text: "aabb", sourceIndices: [10, 11, 14, 15]),
+            language: "en")
+
+        #expect(seg.pageRanges == [NSRange(location: 10, length: 6)])
+    }
+
+    @Test("buraco de fórmula continua partindo o realce")
+    func formulaParte() {
+        let seg = DocumentSegment(
+            id: 0, pageIndex: 0,
+            segment: MappedSegment(text: "aabb", sourceIndices: [10, 11, 22, 23]),
+            language: "en")
+
+        #expect(seg.pageRanges.count == 2)
+    }
+
     @Test("texto contíguo continua um intervalo só")
     func contiguoIntervaloUnico() throws {
         let doc = try makePDF(pages: [

@@ -27,18 +27,34 @@ public struct DocumentSegment: Sendable, Equatable, Identifiable {
         return NSRange(location: low, length: high - low + 1)
     }
 
+    /// Salto no mapa que ainda conta como texto contíguo.
+    ///
+    /// Medido no corpus: 31 buracos de dois caracteres, todos `"-\n"` — o hífen de quebra
+    /// de linha, que sai da fala mas continua na página — e dois de um caractere, `"\n"`.
+    /// A fórmula removida do trecho vizinho deixa buraco de dez. Três separa os dois casos
+    /// com folga; abaixo disso é normalização, não conteúdo retirado.
+    private static let maxNormalizationGap = 3
+
     /// Os trechos de página que a voz realmente lê, em ordem.
     ///
     /// Quando uma fórmula sai do meio do texto, o que sobra deixa de ser contíguo na
     /// página. `pageRange` sozinho iria de ponta a ponta e cobriria a equação removida —
-    /// o realce pintava justamente o que não é falado.
+    /// o realce pintava justamente o que não é falado. Partir em todo salto, por outro
+    /// lado, estilhaça o realce em cada palavra hifenizada.
     public var pageRanges: [NSRange] {
         var runs: [NSRange] = []
         for index in segment.sourceIndices {
-            if let last = runs.last, index == NSMaxRange(last) {
-                runs[runs.count - 1] = NSRange(location: last.location, length: last.length + 1)
-            } else if let last = runs.last, NSLocationInRange(index, last) {
-                continue  // o mapa repete um índice ao juntar pedaços; não abre trecho novo
+            guard let last = runs.last else {
+                runs.append(NSRange(location: index, length: 1))
+                continue
+            }
+            // O mapa repete um índice ao juntar pedaços; não abre trecho novo.
+            if NSLocationInRange(index, last) { continue }
+
+            let gap = index - NSMaxRange(last)
+            if gap >= 0, gap < Self.maxNormalizationGap {
+                runs[runs.count - 1] = NSRange(location: last.location,
+                                               length: index - last.location + 1)
             } else {
                 runs.append(NSRange(location: index, length: 1))
             }

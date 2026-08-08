@@ -119,6 +119,47 @@ struct RealDocumentTests {
         #expect(taxa < 0.02, "\(comFormula.count)/\(analisados) trechos com fórmula: \(amostra)")
     }
 
+    /// O realce de um trecho é desenhado um pedaço por vez, e cada pedaço passa pela
+    /// autocorreção do localizador por conta própria — então partir o trecho sem motivo
+    /// não é só desperdício, é destaque errado. Só a fórmula removida justifica partir.
+    ///
+    /// Medido quando o corte era ingênuo: 33 partições em três páginas, todas em `"-\n"`,
+    /// o hífen de quebra de linha.
+    @Test("o realce não se estilhaça em palavra hifenizada")
+    func realceNaoEstilhaca() throws {
+        let arquivos = SamplePDFs.files
+        let segmenter = DocumentSegmenter()
+        var inteiros = 0, partidos = 0
+        var exemplos: [String] = []
+
+        for arquivo in arquivos.prefix(12) {
+            guard let doc = PDFDocument(url: arquivo) else { continue }
+            for seg in segmenter.segments(of: doc, documentLanguage: "en") {
+                let partes = seg.pageRanges
+                guard !partes.isEmpty else { continue }
+                if partes.count == 1 { inteiros += 1; continue }
+                partidos += 1
+
+                // Onde parte, o buraco tem de ser conteúdo retirado — não normalização.
+                for (a, b) in zip(partes, partes.dropFirst()) {
+                    let buraco = b.location - NSMaxRange(a)
+                    if buraco < 3, exemplos.count < 4 {
+                        exemplos.append("\(arquivo.lastPathComponent) #\(seg.id): buraco de \(buraco)")
+                    }
+                }
+            }
+        }
+
+        #expect(inteiros > 100, "poucos trechos analisados: \(inteiros)")
+        #expect(exemplos.isEmpty, "\(exemplos.count) partições por normalização: \(exemplos)")
+
+        // Partir é a exceção, e vem só de equação retirada do meio do texto. Medido neste
+        // corpus de artigos de engenharia: 8,0%. O limite deixa folga para variação entre
+        // documentos, mas pega de volta o dia em que a normalização voltar a partir.
+        let taxa = Double(partidos) / Double(max(inteiros + partidos, 1))
+        #expect(taxa < 0.12, "\(partidos) trechos partidos de \(inteiros + partidos)")
+    }
+
     @Test("parágrafo longo não é cortado deixando a cauda solta")
     func caudaDeParagrafoNaoViraTrecho() throws {
         let arquivos = SamplePDFs.files
