@@ -161,4 +161,44 @@ struct DocumentSegmenterTests {
         let pageText = try #require(doc.page(at: 0)?.string) as NSString
         #expect(pageText.substring(with: naPagina) == "highlights")
     }
+
+    // MARK: - Realce de um trecho com buraco
+
+    /// Quando a fórmula sai do meio do trecho, o texto falado deixa de ser contíguo na
+    /// página. `pageRange` sozinho vai do primeiro ao último índice e por isso cobre o
+    /// que foi removido — o realce pintava a equação que a voz não lê.
+    private func comBuraco() -> DocumentSegment {
+        // "abc" nas posições 10..12 e "xyz" nas posições 30..32; 13..29 saíram.
+        let mapa = [10, 11, 12, 30, 31, 32]
+        return DocumentSegment(id: 0, pageIndex: 0,
+                               segment: MappedSegment(text: "abcxyz", sourceIndices: mapa),
+                               language: "en")
+    }
+
+    @Test("os trechos realçados pulam o que foi removido")
+    func realcePulaBuraco() {
+        let seg = comBuraco()
+        #expect(seg.pageRanges == [NSRange(location: 10, length: 3),
+                                   NSRange(location: 30, length: 3)])
+    }
+
+    @Test("texto contíguo continua um intervalo só")
+    func contiguoIntervaloUnico() throws {
+        let doc = try makePDF(pages: [
+            "The reader highlights every word while the voice moves through the paragraph.",
+        ])
+        let seg = try #require(DocumentSegmenter().segments(of: doc, documentLanguage: "en").first)
+        #expect(seg.pageRanges.count == 1)
+        #expect(seg.pageRanges.first == seg.pageRange)
+    }
+
+    /// Tocar sobre a equação não pode resolver como se ela pertencesse ao trecho: o que
+    /// vale é o texto que a voz realmente lê.
+    @Test("índice dentro do buraco não conta como pertencente ao trecho")
+    func buracoNaoPertence() {
+        let seg = comBuraco()
+        #expect(seg.contains(pageCharacterIndex: 11))
+        #expect(seg.contains(pageCharacterIndex: 31))
+        #expect(seg.contains(pageCharacterIndex: 20) == false)
+    }
 }

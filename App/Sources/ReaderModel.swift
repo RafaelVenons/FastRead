@@ -59,8 +59,10 @@ final class ReaderModel {
         let contexto = around.length > 0 ? pageText.substring(with: around) : "—"
 
         var esperado = "—"
-        if let range = segment?.pageRange, NSMaxRange(range) <= pageText.length {
-            esperado = String(pageText.substring(with: range).prefix(90))
+        if let partes = segment?.pageRanges.filter({ NSMaxRange($0) <= pageText.length }),
+           !partes.isEmpty {
+            esperado = String(partes.map { pageText.substring(with: $0) }
+                .joined(separator: " ").prefix(90))
         }
 
         diagnostics = TapDiagnostics(
@@ -68,7 +70,11 @@ final class ReaderModel {
             characterIndex: characterIndex,
             textAtIndex: contexto.replacingOccurrences(of: "\n", with: "⏎"),
             segmentID: segment?.id,
-            segmentRange: segment?.pageRange.map { "\($0.location)..<\(NSMaxRange($0))" } ?? "—",
+            // Vários pedaços quando uma fórmula saiu do meio; o painel mostra todos para
+            // um realce estranho poder ser lido direto daqui.
+            segmentRange: segment.map { seg in
+                seg.pageRanges.map { "\($0.location)..<\(NSMaxRange($0))" }.joined(separator: "+")
+            } ?? "—",
             segmentHead: String((segment?.text ?? "—").prefix(60)),
             expectedHighlight: esperado.replacingOccurrences(of: "\n", with: "⏎"),
             actualHighlight: "(aguardando)",
@@ -276,13 +282,14 @@ final class ReaderModel {
     var highlight: PDFCanvas.Highlight? {
         guard let index = currentIndex, segments.indices.contains(index) else { return nil }
         let segment = segments[index]
-        guard let segmentRange = segment.pageRange else { return nil }
+        let segmentRanges = segment.pageRanges
+        guard !segmentRanges.isEmpty else { return nil }
 
         // O alinhamento fala em índices do texto normalizado; a página usa os dela.
         let wordRange = player.currentWordRange.flatMap(segment.segment.sourceRange(for:))
 
         return PDFCanvas.Highlight(pageIndex: segment.pageIndex,
-                                   segmentRange: segmentRange,
+                                   segmentRanges: segmentRanges,
                                    wordRange: wordRange)
     }
 

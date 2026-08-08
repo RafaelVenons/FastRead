@@ -18,15 +18,36 @@ public struct DocumentSegment: Sendable, Equatable, Identifiable {
     public var text: String { segment.text }
 
     /// Área de texto que este segmento ocupa na página, em índices de `page.string`.
+    ///
+    /// Do primeiro ao último índice, sem olhar buracos — serve para localizar e ordenar o
+    /// trecho. Para pintar o realce use `pageRanges`.
     public var pageRange: NSRange? {
         guard let low = segment.sourceIndices.min(),
               let high = segment.sourceIndices.max() else { return nil }
         return NSRange(location: low, length: high - low + 1)
     }
 
+    /// Os trechos de página que a voz realmente lê, em ordem.
+    ///
+    /// Quando uma fórmula sai do meio do texto, o que sobra deixa de ser contíguo na
+    /// página. `pageRange` sozinho iria de ponta a ponta e cobriria a equação removida —
+    /// o realce pintava justamente o que não é falado.
+    public var pageRanges: [NSRange] {
+        var runs: [NSRange] = []
+        for index in segment.sourceIndices {
+            if let last = runs.last, index == NSMaxRange(last) {
+                runs[runs.count - 1] = NSRange(location: last.location, length: last.length + 1)
+            } else if let last = runs.last, NSLocationInRange(index, last) {
+                continue  // o mapa repete um índice ao juntar pedaços; não abre trecho novo
+            } else {
+                runs.append(NSRange(location: index, length: 1))
+            }
+        }
+        return runs
+    }
+
     public func contains(pageCharacterIndex index: Int) -> Bool {
-        guard let range = pageRange else { return false }
-        return NSLocationInRange(index, range)
+        pageRanges.contains { NSLocationInRange(index, $0) }
     }
 }
 

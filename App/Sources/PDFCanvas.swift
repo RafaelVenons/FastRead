@@ -12,8 +12,11 @@ struct PDFCanvas: UIViewRepresentable {
 
     struct Highlight: Equatable {
         let pageIndex: Int
-        /// Trecho inteiro que está sendo lido, em índices de `page.string`.
-        let segmentRange: NSRange
+        /// Pedaços do que está sendo lido, em índices de `page.string`.
+        ///
+        /// Mais de um quando uma fórmula sai do meio do texto: pintar de ponta a ponta
+        /// destacaria a equação que a voz não lê.
+        let segmentRanges: [NSRange]
         /// Palavra sendo pronunciada agora.
         let wordRange: NSRange?
     }
@@ -117,11 +120,18 @@ struct PDFCanvas: UIViewRepresentable {
             }
 
             var selections: [PDFSelection] = []
-            let segment = PageTextLocator.selection(on: page, matching: highlight.segmentRange, in: pageText)
-            if let segment {
-                segment.color = UIColor.systemYellow.withAlphaComponent(0.22)
-                selections.append(segment)
+            let partes = highlight.segmentRanges.compactMap {
+                PageTextLocator.selection(on: page, matching: $0, in: pageText)
             }
+            for parte in partes {
+                parte.color = UIColor.systemYellow.withAlphaComponent(0.22)
+                selections.append(parte)
+            }
+            // O diagnóstico compara o que foi pintado com o que devia ser lido, então
+            // precisa das partes juntas, não só da primeira.
+            let pintado = partes.isEmpty
+                ? nil
+                : partes.compactMap(\.string).joined(separator: " ")
             var word: PDFSelection?
             if let wordRange = highlight.wordRange {
                 word = PageTextLocator.selection(on: page, matching: wordRange, in: pageText)
@@ -131,7 +141,7 @@ struct PDFCanvas: UIViewRepresentable {
                 }
             }
             pdfView.highlightedSelections = selections.isEmpty ? nil : selections
-            onHighlight?(segment?.string, word?.string)
+            onHighlight?(pintado, word?.string)
         }
     }
 }
