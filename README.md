@@ -39,6 +39,8 @@ Most of the work went into problems that only show up in real documents. Each on
 
 **The terminal buffer callback fires twice.** Without an idempotency guard every passage lands in the cache twice.
 
+**Some PDFs don't encode math as math.** Typeset with certain Type1 fonts, the text PDFKit returns has `¼` where the `=` should be, `þ` for `+`, and `ð…Þ` for the parentheses. Counted across the corpus, those characters appear only inside formulas — never in English prose — so they are treated as operators. Without that, an equation stayed in the passage and the voice recited it.
+
 **PencilKit rasterizes at page resolution.** Ink drawn over a PDF blurs when you zoom — a [known limitation](https://developer.apple.com/forums/thread/792941) with no published fix. The notes layer draws its own vector ink instead, so strokes stay sharp at any zoom by construction.
 
 ## Numbers
@@ -72,7 +74,7 @@ Sources/FastReadCore/      testable core, no UI
   AnnotationStore          notes on disk, keyed by file content
 
 App/Sources/               iPad app (SwiftUI + PDFKit + CoreAnimation)
-Tests/FastReadCoreTests/   246 tests
+Tests/FastReadCoreTests/   250 tests
 App/UITests/               12 UI tests
 ```
 
@@ -83,7 +85,7 @@ The core is a Swift package so the tests run in seconds without a simulator. The
 ## Running
 
 ```bash
-swift test                 # 246 tests, ~4s
+swift test                 # 250 tests, ~5s
 xcodegen generate          # generates FastRead.xcodeproj from project.yml
 open FastRead.xcodeproj
 ```
@@ -117,7 +119,8 @@ Built and tested on an iPad Air 5.
 ## Known limitations
 
 - **Scanned PDFs don't work** — there's no selectable text to read. The app says so when it detects one.
-- **Display equations are skipped, not read.** A formula is removed from the passage and the prose around it is joined back together, so the voice reads through the paragraph instead of reciting notation. Deciding what is a formula is a heuristic: it takes two or more consecutive mathematical tokens *and* a strong signal — an operator or a Greek letter — so a lone `R` or `m` in prose survives.
+- **Display equations are skipped, not read.** A formula is removed from the passage and the prose around it is joined back together, so the voice reads through the paragraph instead of reciting notation. Deciding what is a formula is a heuristic: it takes two or more consecutive mathematical tokens *and* a strong signal — an operator, a Greek letter, or a character from the Unicode math block — so a lone `R` or `m` in prose survives.
+- **A formula in the middle of a sentence leaves a gap.** Removing it is the right call for a display equation on its own line, but `Here Δω = ω − ω₀ and ω₀ is the nominal frequency` becomes `Here and ω₀ is the nominal frequency`. Reciting the notation would be worse, so the gap stands.
 - **Words split across pages** stay split; joining them would put text from two pages in one passage, and the highlight can only paint one.
 - **Two- and three-finger gestures work on device but can't be tested automatically** — `twoFingerTap` can't compute coordinates over a `PDFView`. The toolbar buttons cover the same actions and are tested.
 

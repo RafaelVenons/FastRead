@@ -92,6 +92,49 @@ struct MathFilterTests {
         #expect(MathFilter.strippingMath(from: "   ").didStrip == false)
     }
 
+    // MARK: - Fonte matemática mal decodificada
+
+    /// Nem todo PDF entrega `=` e `+`. Em artigos compostos com certas fontes Type1 o
+    /// PDFKit devolve `¼` no lugar de `=`, `þ` no lugar de `+` e `ð…Þ` no lugar dos
+    /// parênteses. Contados no corpus, esses quatro caracteres aparecem **só** dentro de
+    /// fórmula — em prosa científica em inglês eles não ocorrem.
+    @Test("reconhece operadores de fonte mal decodificada")
+    func operadoresMojibake() {
+        #expect(MathFilter.isStrongMath("¼"))
+        #expect(MathFilter.isStrongMath("þ"))
+        #expect(MathFilter.isStrongMath("ð1Þ"))
+    }
+
+    /// Relatado em uso: Bevrani 2014, equação (1). O trecho começava com a fórmula inteira
+    /// colada em "Since, actually…" e a voz recitava a notação antes do parágrafo.
+    @Test("remove equação de PDF com fonte mal decodificada")
+    func removeEquacaoMojibake() {
+        let origem = "2HPg0 KI ¼ dDx dt þ KP Dx ð1Þ ð2Þ x0 Since, actually the initial rate "
+            + "of frequency change just provide an error signal"
+        let resultado = MathFilter.strippingMath(from: origem)
+
+        #expect(resultado.text.hasPrefix("Since, actually the initial rate"))
+        #expect(resultado.text.contains("¼") == false)
+        #expect(resultado.text.contains("þ") == false)
+        #expect(resultado.text.contains("ð1Þ") == false)
+    }
+
+    /// Letras matemáticas do Unicode (U+1D400…U+1D7FF) são itálico de fórmula, não texto:
+    /// `𝑃𝐵𝐸𝑆𝑆` e `𝑆𝑂𝐶` não têm como ser palavra.
+    @Test("reconhece letras matemáticas do Unicode")
+    func letrasMatematicas() {
+        #expect(MathFilter.isStrongMath("𝑃𝐵𝐸𝑆𝑆"))
+        #expect(MathFilter.containsMathRun("the stored energy 𝑆𝑂𝐶𝑡+1 = 𝑃𝐺 𝑡 follows"))
+        #expect(MathFilter.isStrongMath("SOC") == false)
+    }
+
+    /// Um intervalo de citação ou de páginas traz travessão e não é fórmula.
+    @Test("intervalo com travessão não é fórmula")
+    func travessaoNaoEhFormula() {
+        #expect(MathFilter.containsMathRun("as reported in [1–3]. One of the fast responses") == false)
+        #expect(MathFilter.containsMathRun("Energy Systems 54 (2014) 244–254 covers the topic") == false)
+    }
+
     // MARK: - Detecção de trecho matemático
 
     /// Usado pelo invariante que mede o conteúdo falado, não a fronteira entre trechos.

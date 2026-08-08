@@ -122,10 +122,32 @@ public enum MathFilter {
         return runs
     }
 
-    private static let mathSymbols = Set("=±∓×÷∑∫∂∇√≈≠≤≥⋅·∞→←↔∈∀∃−–—^_|<>+")
-    private static let greek = Set("αβγδεζηθικλμνξπρστυφχψωΓΔΘΛΞΠΣΦΨΩ")
+    private static let mathSymbols = Set("=±∓×÷∑∫∂∇▽√≈≠≤≥⋅·∗∞→←↔∈∀∃−–—′^_|<>+")
+    private static let greek = Set("αβγδεζηθικλμνξπρστυφχψωϵΓΔΘΛΞΠΣΦΨΩ")
+
+    /// Operadores que chegam disfarçados de letra.
+    ///
+    /// Nem todo PDF entrega `=` e `+`: compostos com certas fontes Type1, o texto que o
+    /// PDFKit devolve troca `=` por `¼`, `+` por `þ` e os parênteses por `ð…Þ`. Contados
+    /// no corpus de artigos, esses caracteres aparecem **só** dentro de fórmula — em prosa
+    /// científica em inglês eles não ocorrem, então valem como sinal forte.
+    ///
+    /// Sem isto a equação (1) de Bevrani 2014 passava inteira para a fala.
+    private static let misdecodedOperators = Set("¼½¾þðÞ")
+
+    /// Pedaços de chave e colchete de fórmula em display, que vêm como caracteres soltos.
+    private static let displayBrackets = Set("⏞⏟⎧⎨⎩⎪⎡⎢⎣⎤⎦⃒")
+
     /// `y` conta como vogal aqui: sem isso "by" e "my" passariam por variável.
     private static let vowels = Set("aeiouyAEIOUY")
+
+    /// Letras matemáticas do Unicode: itálico de fórmula, nunca palavra.
+    ///
+    /// `𝑃𝐵𝐸𝑆𝑆` e `𝑆𝑂𝐶𝑡` são compostos deste bloco (U+1D400…U+1D7FF), que também traz o
+    /// grego matemático. Um caractere daqui basta para caracterizar fórmula.
+    private static func isMathAlphanumeric(_ scalar: Unicode.Scalar) -> Bool {
+        (0x1D400...0x1D7FF).contains(Int(scalar.value))
+    }
 
     /// Sinal forte: sozinho já caracteriza fórmula.
     ///
@@ -135,9 +157,22 @@ public enum MathFilter {
         let trimmed = token.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:"))
         guard !trimmed.isEmpty else { return false }
 
+        // Um intervalo de citação ou de páginas — `[1–3]`, `244–254` — traz travessão sem
+        // ser fórmula. É o único uso de travessão que aparece cercado só de dígitos.
+        if isNumericRange(trimmed) { return false }
+
+        if trimmed.unicodeScalars.contains(where: isMathAlphanumeric) { return true }
         if trimmed.contains(where: { mathSymbols.contains($0) }) { return true }
         if trimmed.contains(where: { greek.contains($0) }) { return true }
+        if trimmed.contains(where: { misdecodedOperators.contains($0) }) { return true }
+        if trimmed.contains(where: { displayBrackets.contains($0) }) { return true }
         return false
+    }
+
+    private static func isNumericRange(_ token: String) -> Bool {
+        let inner = token.trimmingCharacters(in: CharacterSet(charactersIn: "[]()"))
+        guard inner.contains(where: { $0 == "–" || $0 == "—" || $0 == "-" }) else { return false }
+        return inner.allSatisfy { $0.isNumber || $0 == "–" || $0 == "—" || $0 == "-" || $0 == "," }
     }
 
     /// Sinal fraco: parece variável, mas só entra na fórmula se houver um sinal forte
