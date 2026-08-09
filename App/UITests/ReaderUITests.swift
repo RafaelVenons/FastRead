@@ -347,20 +347,6 @@ final class ReaderUITests: XCTestCase {
         return antes
     }
 
-    func testSondaRolagemManual() throws {
-        let app = launchApp()
-        let canvas = app.otherElements["pdfCanvas"]
-        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
-        canvas.pinch(withScale: 3.5, velocity: 2)
-        Thread.sleep(forTimeInterval: 1)
-
-        let antes = posicaoDoTexto(app)
-        canvas.swipeUp()
-        Thread.sleep(forTimeInterval: 1)
-        let depois = posicaoDoTexto(app)
-        XCTFail("SONDA antes=\(String(describing: antes)) depois=\(String(describing: depois))")
-    }
-
     func testTelaAcompanhaAPalavraLida() throws {
         let app = launchApp()
         let antes = try ampliaEComecaALer(app)

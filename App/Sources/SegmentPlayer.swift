@@ -30,6 +30,13 @@ final class SegmentPlayer {
             index(at: time).map { words[$0].range }
         }
 
+        /// Mesma regra do núcleo: parado, o realce não é recalculado.
+        func highlightRange(at time: TimeInterval,
+                            isPlaying: Bool,
+                            previous: NSRange?) -> NSRange? {
+            isPlaying ? range(at: time) : previous
+        }
+
         private func index(at time: TimeInterval) -> Int? {
             guard time >= 0, time <= duration, !words.isEmpty else { return nil }
             var low = 0, high = words.count - 1, found: Int?
@@ -92,7 +99,11 @@ final class SegmentPlayer {
     private func tick() {
         guard let player, let alignment else { return }
 
-        currentWordRange = alignment.range(at: player.currentTime)
+        // Parado, `player.currentTime` volta a zero: recalcular dali saltaria o realce
+        // para a primeira palavra do trecho, e a tela rolaria de volta atrás dele.
+        currentWordRange = alignment.highlightRange(at: player.currentTime,
+                                                    isPlaying: player.isPlaying,
+                                                    previous: currentWordRange)
 
         if !player.isPlaying {
             let finished = player.currentTime >= alignment.duration - 0.1

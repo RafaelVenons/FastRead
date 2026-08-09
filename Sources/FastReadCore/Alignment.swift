@@ -56,6 +56,17 @@ public struct SegmentAlignment: Codable, Sendable, Equatable {
         wordIndex(at: time).map { words[$0].range }
     }
 
+    /// Palavra a destacar agora, considerando se a reprodução ainda está correndo.
+    ///
+    /// Ao terminar, o `AVAudioPlayer` zera `currentTime`. Recalcular a partir dele faria o
+    /// realce saltar para a primeira palavra do trecho — e a tela, que acompanha o
+    /// realce, rolar de volta com ele. Parado, a última palavra permanece onde estava.
+    public func highlightRange(at time: TimeInterval,
+                               isPlaying: Bool,
+                               previous: NSRange?) -> NSRange? {
+        isPlaying ? range(at: time) : previous
+    }
+
     /// Instante em que a fala alcança uma posição do texto.
     ///
     /// Permite começar a leitura na frase que o leitor tocou, aproveitando o áudio do
