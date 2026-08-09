@@ -30,6 +30,8 @@ struct PDFCanvas: UIViewRepresentable {
     var onHighlight: ((_ segment: String?, _ word: String?) -> Void)?
     var ink: InkLayerController?
     var isDrawing = false
+    /// A tela acompanha a palavra que a voz está lendo.
+    var followsReading = true
 
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
@@ -66,6 +68,7 @@ struct PDFCanvas: UIViewRepresentable {
         view.isInMarkupMode = isDrawing
         ink?.isDrawingEnabled = isDrawing
         context.coordinator.isDrawing = isDrawing
+        context.coordinator.followsReading = followsReading
         context.coordinator.onTap = onTap
         context.coordinator.onHighlight = onHighlight
         context.coordinator.apply(highlight)
@@ -82,6 +85,7 @@ struct PDFCanvas: UIViewRepresentable {
         var onHighlight: ((_ segment: String?, _ word: String?) -> Void)?
     var ink: InkLayerController?
     var isDrawing = false
+        var followsReading = true
         private var applied: Highlight?
 
         init(onTap: @escaping (_ pageIndex: Int, _ characterIndex: Int) -> Void) {
@@ -142,6 +146,22 @@ struct PDFCanvas: UIViewRepresentable {
             }
             pdfView.highlightedSelections = selections.isEmpty ? nil : selections
             onHighlight?(pintado, word?.string)
+
+            if let word { follow(word, on: page, in: pdfView) }
+        }
+
+        /// Traz de volta a palavra que saiu da tela.
+        ///
+        /// Desenhando, não: a rolagem no meio de um traço o arruinaria.
+        private func follow(_ word: PDFSelection, on page: PDFPage, in pdfView: PDFView) {
+            guard followsReading, !isDrawing else { return }
+
+            let alvo = word.bounds(for: page)
+            let naTela = pdfView.convert(pdfView.bounds, to: page)
+            guard let revelar = ReadingFollower.rectToReveal(word: alvo, visible: naTela) else { return }
+
+            // `go(to:on:)` salta seco; dentro do bloco a mudança de offset é interpolada.
+            UIView.animate(withDuration: 0.3) { pdfView.go(to: revelar, on: page) }
         }
     }
 }

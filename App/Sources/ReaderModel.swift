@@ -17,6 +17,11 @@ final class ReaderModel {
 
     /// Continua para o próximo segmento quando o atual termina.
     var autoAdvance = true
+    /// A tela acompanha a palavra lida quando ela sai de vista.
+    ///
+    /// Os testes de UI desligam pela variável de ambiente: o `Toggle` mora dentro de um
+    /// `Menu`, e ali o XCUITest não o enxerga como interruptor.
+    var followsReading = ProcessInfo.processInfo.environment["FASTREAD_NO_FOLLOW"] == nil
 
     // MARK: - Diagnóstico
 

@@ -9,6 +9,7 @@
 "reader.speed.normal" = "Normal";
 "reader.speed.fast" = "Rápida";
 "reader.autoAdvance" = "Continuar automaticamente";
+"reader.followReading" = "Acompanhar a palavra lida";
 "reader.diagnostics" = "Modo diagnóstico";
 "reader.clearCache" = "Limpar cache";
 "reader.cacheSize" = "%@ em cache";

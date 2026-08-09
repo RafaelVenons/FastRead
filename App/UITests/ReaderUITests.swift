@@ -319,6 +319,74 @@ final class ReaderUITests: XCTestCase {
                       "lendo, o seletor não apareceu")
     }
 
+    // MARK: - Acompanhar a leitura
+
+    /// Com a página inteira à vista nada precisa rolar; ampliada, a palavra lida sai da
+    /// tela e a leitura em voz alta deixa de ser acompanhável. O PDFKit expõe o texto da
+    /// página como elementos de acessibilidade, então o deslocamento deles denuncia a
+    /// rolagem.
+    private func posicaoDoTexto(_ app: XCUIApplication) -> CGFloat? {
+        let alvo = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH 'Journal of Document'")).firstMatch
+        guard alvo.exists else { return nil }
+        return alvo.frame.origin.y
+    }
+
+    private func ampliaEComecaALer(_ app: XCUIApplication) throws -> CGFloat {
+        let canvas = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+
+        // Ampliado, o parágrafo não cabe mais na tela — é a condição do problema.
+        canvas.pinch(withScale: 6, velocity: 3)
+        Thread.sleep(forTimeInterval: 1)
+
+        let antes = try XCTUnwrap(posicaoDoTexto(app), "nenhum texto do PDF visível para medir")
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        XCTAssertTrue(app.staticTexts["segmentCounter"].waitForExistence(timeout: 10),
+                      "nada começou a tocar")
+        return antes
+    }
+
+    func testSondaRolagemManual() throws {
+        let app = launchApp()
+        let canvas = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+        canvas.pinch(withScale: 3.5, velocity: 2)
+        Thread.sleep(forTimeInterval: 1)
+
+        let antes = posicaoDoTexto(app)
+        canvas.swipeUp()
+        Thread.sleep(forTimeInterval: 1)
+        let depois = posicaoDoTexto(app)
+        XCTFail("SONDA antes=\(String(describing: antes)) depois=\(String(describing: depois))")
+    }
+
+    func testTelaAcompanhaAPalavraLida() throws {
+        let app = launchApp()
+        let antes = try ampliaEComecaALer(app)
+
+        XCTAssertTrue(Self.aguarda(ate: 25) {
+            guard let agora = self.posicaoDoTexto(app) else { return true }
+            return abs(agora - antes) > 20
+        }, "a tela não acompanhou a palavra lida")
+    }
+
+    /// A prova de que o movimento veio de acompanhar, e não de outra coisa: desligado, a
+    /// tela fica parada lendo o mesmo trecho.
+    func testSemAcompanharATelaFicaParada() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["FASTREAD_OPEN_PDF"] = pdfURL.path
+        app.launchEnvironment["FASTREAD_FINGER_DRAWING"] = "1"
+        app.launchEnvironment["FASTREAD_NO_FOLLOW"] = "1"
+        app.launch()
+
+        let antes = try ampliaEComecaALer(app)
+        Thread.sleep(forTimeInterval: 12)
+
+        let agora = try XCTUnwrap(posicaoDoTexto(app))
+        XCTAssertEqual(agora, antes, accuracy: 20, "a tela rolou com o acompanhamento desligado")
+    }
+
     // MARK: - Auxiliares
 
     /// Último número do rótulo — é onde a contagem de traços aparece.

@@ -9,6 +9,7 @@
 "reader.speed.normal" = "Normal";
 "reader.speed.fast" = "Fast";
 "reader.autoAdvance" = "Continue automatically";
+"reader.followReading" = "Follow the spoken word";
 "reader.diagnostics" = "Diagnostic mode";
 "reader.clearCache" = "Clear cache";
 "reader.cacheSize" = "%@ cached";

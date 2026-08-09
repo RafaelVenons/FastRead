@@ -18,7 +18,8 @@ struct ReaderView: View {
                               onTap: model.handleTap,
                               onHighlight: model.recordHighlight,
                               ink: model.ink,
-                              isDrawing: model.isDrawing)
+                              isDrawing: model.isDrawing,
+                              followsReading: model.followsReading)
                     .ignoresSafeArea(edges: .bottom)
                 } else {
                     emptyState
@@ -88,6 +89,8 @@ struct ReaderView: View {
                     Text("reader.speed.fast").tag(Float(0.58))
                 }
                 Toggle("reader.autoAdvance", isOn: $model.autoAdvance)
+                Toggle("reader.followReading", isOn: $model.followsReading)
+                    .accessibilityIdentifier("followToggle")
                 Toggle("reader.diagnostics", isOn: $model.diagnosticsEnabled)
                 Divider()
                 Button("notes.clearPage", systemImage: "eraser") { model.ink.clearCurrentPage() }
