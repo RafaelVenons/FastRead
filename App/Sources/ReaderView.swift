@@ -31,9 +31,12 @@ struct ReaderView: View {
                 if model.document != nil { controls }
             }
         }
-        .fileImporter(isPresented: $showingImporter,
-                      allowedContentTypes: [.pdf]) { result in
-            if case .success(let url) = result { model.open(url: url) }
+        .sheet(isPresented: $showingImporter) {
+            DocumentPicker(onPick: { url in
+                showingImporter = false
+                model.open(url: url)
+            }, onCancel: { showingImporter = false })
+            .ignoresSafeArea()
         }
         .sheet(isPresented: $showingVoices) {
             VoicePickerView(model: model)
@@ -61,6 +64,7 @@ struct ReaderView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             Button { showingImporter = true } label: { Image(systemName: "folder") }
+                .accessibilityIdentifier("openDocument")
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button { model.isDrawing.toggle() } label: {

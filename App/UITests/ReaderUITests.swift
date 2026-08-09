@@ -266,6 +266,59 @@ final class ReaderUITests: XCTestCase {
                       "dois dedos não desfizeram: \(status.label)")
     }
 
+    /// Relatado em uso: apertar a pasta no canto superior esquerdo não faz nada, e não há
+    /// como trocar de PDF. O seletor do sistema roda em outro processo, então o que se
+    /// pode afirmar de dentro do app é que alguma coisa passou a cobrir a tela.
+    func testPastaAbreOSeletorDeArquivos() {
+        let app = launchApp()
+        let canvas = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+
+        let pasta = app.buttons["openDocument"]
+        XCTAssertTrue(pasta.waitForExistence(timeout: 5), "botão de pasta não existe")
+        XCTAssertTrue(pasta.isHittable, "botão de pasta não é tocável")
+        pasta.tap()
+
+        // Com o seletor na frente, o PDF deixa de ser alcançável.
+        let cobriu = Self.aguarda(ate: 10) { !canvas.isHittable }
+        if !cobriu {
+            let visiveis = app.descendants(matching: .any).allElementsBoundByIndex
+                .prefix(30).map { "\($0.elementType.rawValue):\($0.identifier):\($0.label)" }
+            XCTFail("o seletor não apareceu. Na tela: \(visiveis.joined(separator: " | "))")
+        }
+    }
+
+    /// O mesmo botão, nos estados em que o app costuma estar: desenhando, e lendo.
+    /// Desenhar mexe na interação das views do PDFKit e desliga o scroll, e é aí que um
+    /// toque pode se perder antes de chegar à barra.
+    func testPastaFuncionaDesenhandoELendo() throws {
+        let app = launchApp()
+        let canvas = app.otherElements["pdfCanvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+        let pasta = app.buttons["openDocument"]
+        XCTAssertTrue(pasta.waitForExistence(timeout: 5))
+
+        // 1. desenhando
+        app.buttons["drawToggle"].tap()
+        XCTAssertTrue(pasta.isHittable, "desenhando, a pasta não é tocável")
+        pasta.tap()
+        XCTAssertTrue(Self.aguarda(ate: 10) { !canvas.isHittable },
+                      "desenhando, o seletor não apareceu")
+
+        // Fecha o seletor para o próximo estado.
+        let cancelar = app.buttons["Cancel"].firstMatch
+        if cancelar.waitForExistence(timeout: 5) { cancelar.tap() }
+        XCTAssertTrue(Self.aguarda(ate: 10) { canvas.isHittable }, "o seletor não fechou")
+        app.buttons["drawToggle"].tap()
+
+        // 2. lendo
+        canvas.tap()
+        XCTAssertTrue(pasta.isHittable, "lendo, a pasta não é tocável")
+        pasta.tap()
+        XCTAssertTrue(Self.aguarda(ate: 10) { !canvas.isHittable },
+                      "lendo, o seletor não apareceu")
+    }
+
     // MARK: - Auxiliares
 
     /// Último número do rótulo — é onde a contagem de traços aparece.

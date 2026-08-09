@@ -169,13 +169,26 @@ final class ReaderModel {
 
     // MARK: - Documento
 
+    /// URL cujo acesso com escopo de segurança está aberto agora.
+    private var scopedURL: URL?
+
+    private func releaseScopedAccess() {
+        scopedURL?.stopAccessingSecurityScopedResource()
+        scopedURL = nil
+    }
+
     func open(url: URL) {
         // O picker devolve uma URL fora do sandbox; sem isto o PDFKit lê vazio.
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        //
+        // O acesso fica aberto enquanto o documento estiver em uso: o PDFKit lê as
+        // páginas sob demanda, então soltá-lo ao fim desta função deixaria as páginas
+        // seguintes ilegíveis. Quem fecha é a abertura do documento seguinte.
+        releaseScopedAccess()
+        if url.startAccessingSecurityScopedResource() { scopedURL = url }
 
         guard let document = PDFDocument(url: url) else {
             status = String(localized: "reader.status.openFailed")
+            releaseScopedAccess()
             return
         }
 
