@@ -47,7 +47,7 @@ public enum PageTextLocator {
         // determina o deslocamento; o fim se resolve escolhendo a borda.
         let head = String(wanted.prefix(24))
 
-        var best: (selection: PDFSelection, score: Int)?
+        var best: (selection: PDFSelection, score: Int, delta: Int)?
 
         // O fim vem convertido, não somado ao comprimento: `range.length` conta as
         // quebras de linha de `page.string`, que não ocupam posição entre os glifos.
@@ -72,11 +72,93 @@ public enum PageTextLocator {
                 // texto na ponta.
                 let alignedStart = got.hasPrefix(head) || wanted.hasPrefix(String(got.prefix(24)))
                 let score = (alignedStart ? 0 : 10_000) + abs(got.count - wanted.count)
-                if best == nil || score < best!.score { best = (candidate, score) }
+                if best == nil || score < best!.score { best = (candidate, score, delta) }
             }
         }
+        // Segunda tentativa: a sonda curta não alcançou. Em vez de varrer mais longe — o
+        // desvio medido nos artigos chega a 200, e isto roda a cada palavra — mede-se a
+        // distância a partir do que veio errado, e sonda-se de novo em volta do corrigido.
+        if let anterior = best,
+           let shift = drift(from: anterior.selection, usedDelta: anterior.delta,
+                             wanted: range.location, in: pageText), shift != 0 {
+
+            for delta in probes {
+                let start = estimate + shift + delta
+                let end = estimateEnd + shift + delta
+
+                for edge in SelectionEdge.allCases {
+                    guard let candidate = selection(on: page, boundsStart: start,
+                                                    boundsEnd: end, edge: edge),
+                          let text = candidate.string else { continue }
+
+                    let got = collapsed(text)
+                    if got == wanted { return candidate }
+
+                    let alignedStart = got.hasPrefix(head) || wanted.hasPrefix(String(got.prefix(24)))
+                    let score = (alignedStart ? 0 : 10_000) + abs(got.count - wanted.count)
+                    if best == nil || score < best!.score { best = (candidate, score, shift + delta) }
+                }
+            }
+        }
+
         // Melhor um realce ligeiramente torto do que nenhum.
         return best?.selection
+    }
+
+    /// Quanto a estimativa errou, lido do próprio texto que ela trouxe.
+    ///
+    /// A seleção obtida cobre algum ponto da página; achando esse ponto em `page.string`,
+    /// a diferença até onde ela deveria começar é a correção — um cálculo, não uma
+    /// varredura.
+    ///
+    /// A distância do token até o começo da seleção entra na conta. Sem ela a correção
+    /// saía com o sinal trocado sempre que a âncora não era a primeira palavra: medido,
+    /// o realce continuava abrindo na equação anterior.
+    private static func drift(from candidate: PDFSelection,
+                              usedDelta: Int,
+                              wanted location: Int,
+                              in pageText: NSString) -> Int? {
+        guard let text = candidate.string as NSString? else { return nil }
+
+        // Um token curto como "the" apareceria em toda parte; o primeiro longo o bastante
+        // identifica a posição sem ambiguidade.
+        var anchor: (token: String, offset: Int)?
+        text.enumerateSubstrings(in: NSRange(location: 0, length: text.length),
+                                 options: .byWords) { sub, range, _, stop in
+            guard let sub, sub.count >= 5 else { return }
+            anchor = (sub, range.location)
+            stop.pointee = true
+        }
+
+        guard let anchor,
+              let found = nearestOccurrence(of: anchor.token, to: location, in: pageText)
+        else { return nil }
+
+        return usedDelta + anchor.offset
+            + boundsIndex(for: location, in: pageText)
+            - boundsIndex(for: found, in: pageText)
+    }
+
+    /// Ocorrência mais próxima de `target`, não a primeira da página.
+    ///
+    /// Procurar a primeira já custou um realce deslocado ~70 caracteres antes: a palavra
+    /// existia várias vezes na página e a busca parava na errada.
+    private static func nearestOccurrence(of token: String, to target: Int, in pageText: NSString) -> Int? {
+        let window = 3_000
+        let start = max(0, target - window)
+        let length = min(pageText.length - start, window * 2)
+        guard length > 0 else { return nil }
+
+        var best: Int?
+        var searchFrom = start
+        while searchFrom < start + length {
+            let remaining = NSRange(location: searchFrom, length: start + length - searchFrom)
+            let hit = pageText.range(of: token, options: [], range: remaining)
+            guard hit.location != NSNotFound else { break }
+            if best == nil || abs(hit.location - target) < abs(best! - target) { best = hit.location }
+            searchFrom = hit.location + 1
+        }
+        return best
     }
 
     private enum SelectionEdge: CaseIterable {

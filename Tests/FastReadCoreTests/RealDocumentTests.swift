@@ -205,31 +205,50 @@ struct RealDocumentTests {
             s.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
         }
 
-        var exatos = 0, total = 0
+        var exatos = 0, total = 0, comecamCerto = 0
         var desvios: [String] = []
 
+        // Documento inteiro, não os primeiros trechos: o desvio entre os dois sistemas de
+        // índice do PDFKit cresce ao longo da página, então amostrar só o começo esconde
+        // exatamente os casos que falham. Relatado em uso num parágrafo da página 3, cujo
+        // realce começava na equação anterior.
         for arquivo in arquivos.prefix(6) {
             guard let doc = PDFDocument(url: arquivo) else { continue }
-            for seg in segmenter.segments(of: doc, documentLanguage: "en").prefix(60) {
+            for seg in segmenter.segments(of: doc, documentLanguage: "en") {
                 guard let page = doc.page(at: seg.pageIndex),
-                      let pageText = page.string as NSString?,
-                      let range = seg.pageRange, NSMaxRange(range) <= pageText.length,
-                      let realcado = PageTextLocator.selection(on: page, matching: range, in: pageText)?.string
-                else { continue }
+                      let pageText = page.string as NSString? else { continue }
 
-                total += 1
-                let esperado = limpo(pageText.substring(with: range))
-                if limpo(realcado) == esperado { exatos += 1 }
-                else if desvios.count < 4 {
-                    desvios.append("esp='\(esperado.prefix(20))' obt='\(limpo(realcado).prefix(20))'")
+                for pedaco in seg.pageRanges where NSMaxRange(pedaco) <= pageText.length {
+                    guard let realcado = PageTextLocator.selection(on: page, matching: pedaco,
+                                                                   in: pageText)?.string
+                    else { total += 1; continue }
+
+                    total += 1
+                    let esperado = limpo(pageText.substring(with: pedaco))
+                    let obtido = limpo(realcado)
+
+                    if obtido == esperado { exatos += 1 }
+                    if obtido.hasPrefix(String(esperado.prefix(24))) { comecamCerto += 1 }
+                    else if desvios.count < 4 {
+                        desvios.append("\(arquivo.lastPathComponent) #\(seg.id) esp='\(esperado.prefix(24))' obt='\(obtido.prefix(24))'")
+                    }
                 }
             }
         }
 
-        #expect(total > 100, "poucas amostras: \(total)")
-        let taxa = Double(exatos) / Double(max(total, 1))
+        #expect(total > 500, "poucas amostras: \(total)")
         let amostra = desvios.joined(separator: " ## ")
-        #expect(taxa > 0.8, "só \(exatos)/\(total) realces exatos: \(amostra)")
+
+        // Onde o realce COMEÇA é o que o uso reclamou: ele abria na equação anterior, que
+        // nem é lida. Medido depois da correção de desvio: 97%.
+        let taxaComeco = Double(comecamCerto) / Double(max(total, 1))
+        #expect(taxaComeco > 0.95,
+                "só \(comecamCerto)/\(total) realces começam certo: \(amostra)")
+
+        // Bater por inteiro é mais exigente, e o que sobra é sobra de cauda e texto de
+        // figura — outro problema, ainda aberto. Medido: 90%, contra 83% antes.
+        let taxaExata = Double(exatos) / Double(max(total, 1))
+        #expect(taxaExata > 0.88, "só \(exatos)/\(total) realces exatos")
     }
 
     @Test("tocar no corpo não resolve para o cabeçalho")

@@ -88,6 +88,13 @@ struct PDFCanvas: UIViewRepresentable {
         var followsReading = true
         private var applied: Highlight?
 
+        /// Identidade do realce de parágrafo, para reaproveitá-lo entre palavras.
+        struct SegmentKeyForHighlight: Equatable {
+            let pageIndex: Int
+            let ranges: [NSRange]
+        }
+        private var segmentSelections: (key: SegmentKeyForHighlight, selections: [PDFSelection])?
+
         init(onTap: @escaping (_ pageIndex: Int, _ characterIndex: Int) -> Void) {
             self.onTap = onTap
         }
@@ -124,8 +131,18 @@ struct PDFCanvas: UIViewRepresentable {
             }
 
             var selections: [PDFSelection] = []
-            let partes = highlight.segmentRanges.compactMap {
-                PageTextLocator.selection(on: page, matching: $0, in: pageText)
+            // O realce do parágrafo é o mesmo enquanto ele estiver sendo lido, e resolvê-lo
+            // custa ~1,7 ms — caro para refazer a cada palavra, 20 vezes por segundo.
+            let chave = SegmentKeyForHighlight(pageIndex: highlight.pageIndex,
+                                               ranges: highlight.segmentRanges)
+            let partes: [PDFSelection]
+            if let cached = segmentSelections, cached.key == chave {
+                partes = cached.selections
+            } else {
+                partes = highlight.segmentRanges.compactMap {
+                    PageTextLocator.selection(on: page, matching: $0, in: pageText)
+                }
+                segmentSelections = (chave, partes)
             }
             for parte in partes {
                 parte.color = UIColor.systemYellow.withAlphaComponent(0.22)
