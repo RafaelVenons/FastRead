@@ -54,7 +54,7 @@ Measured on this project, not estimated:
 | Audio at 24 kbps AAC | 17 MB/hour — versus 311 MB/hour raw PCM |
 | An 8-hour book in cache | ~136 MB, versus ~2.5 GB uncompressed |
 | Language detection | ~6 ms per passage |
-| Passage highlight accuracy | 312/360 exact on real papers |
+| Passage highlight accuracy | 97% exact on real papers (4734/4874 passages) |
 
 ## Architecture
 
@@ -74,8 +74,8 @@ Sources/FastReadCore/      testable core, no UI
   AnnotationStore          notes on disk, keyed by file content
 
 App/Sources/               iPad app (SwiftUI + PDFKit + CoreAnimation)
-Tests/FastReadCoreTests/   250 tests
-App/UITests/               12 UI tests
+Tests/FastReadCoreTests/   273 tests
+App/UITests/               18 UI tests
 ```
 
 The core is a Swift package so the tests run in seconds without a simulator. The app depends on it.
@@ -85,7 +85,7 @@ The core is a Swift package so the tests run in seconds without a simulator. The
 ## Running
 
 ```bash
-swift test                 # 250 tests, ~5s
+swift test                 # 273 tests, ~6s
 xcodegen generate          # generates FastRead.xcodeproj from project.yml
 open FastRead.xcodeproj
 ```

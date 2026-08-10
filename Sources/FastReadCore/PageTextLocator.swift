@@ -101,9 +101,44 @@ public enum PageTextLocator {
             }
         }
 
+        // Terceira tentativa: o começo está no lugar e só a ponta erra. O desvio entre os
+        // dois sistemas de índice cresce ao longo do trecho, então aplicar ao fim o mesmo
+        // que se aplicou ao começo deixa sobra ou falta — medido nos artigos, mediana de
+        // 2 caracteres a mais, o bastante para acender a primeira palavra do parágrafo
+        // seguinte. Com o começo fixo, o fim é procurado por conta própria.
+        if let anterior = best, anterior.score < 10_000, anterior.score > 0 {
+            for endDelta in tailProbes {
+                for edge in SelectionEdge.allCases {
+                    guard let candidate = selection(on: page,
+                                                    boundsStart: estimate + anterior.delta,
+                                                    boundsEnd: estimateEnd + anterior.delta + endDelta,
+                                                    edge: edge),
+                          let text = candidate.string else { continue }
+
+                    let got = collapsed(text)
+                    if got == wanted { return candidate }
+
+                    guard got.hasPrefix(head) || wanted.hasPrefix(String(got.prefix(24))) else { continue }
+                    let score = abs(got.count - wanted.count)
+                    if score < best!.score { best = (candidate, score, anterior.delta) }
+                }
+            }
+        }
+
         // Melhor um realce ligeiramente torto do que nenhum.
         return best?.selection
     }
+
+    /// Ajustes tentados só no fim, depois que o começo já está no lugar.
+    ///
+    /// Faixa curta porque o erro de cauda é pequeno: medido nos artigos, mediana de 2 e
+    /// p90 de 4 caracteres. Buscá-lo em separado custa uma dúzia de seleções, contra as
+    /// centenas que uma varredura combinada de começo e fim exigiria.
+    private static let tailProbes: [Int] = {
+        var result: [Int] = []
+        for delta in 1...6 { result.append(-delta); result.append(delta) }
+        return result
+    }()
 
     /// Quanto a estimativa errou, lido do próprio texto que ela trouxe.
     ///

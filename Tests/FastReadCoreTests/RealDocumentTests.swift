@@ -245,10 +245,13 @@ struct RealDocumentTests {
         #expect(taxaComeco > 0.95,
                 "só \(comecamCerto)/\(total) realces começam certo: \(amostra)")
 
-        // Bater por inteiro é mais exigente, e o que sobra é sobra de cauda e texto de
-        // figura — outro problema, ainda aberto. Medido: 90%, contra 83% antes.
+        // Bater por inteiro exige acertar também onde o realce TERMINA. O erro de cauda
+        // era pequeno — mediana de 2 caracteres sobrando — mas acendia a primeira palavra
+        // do parágrafo seguinte, que a voz não lê. Procurar o fim separado do começo
+        // levou o acerto exato de 90% a 97%: dos que começam certo, quase todos agora
+        // terminam certo também.
         let taxaExata = Double(exatos) / Double(max(total, 1))
-        #expect(taxaExata > 0.88, "só \(exatos)/\(total) realces exatos")
+        #expect(taxaExata > 0.95, "só \(exatos)/\(total) realces exatos")
     }
 
     @Test("tocar no corpo não resolve para o cabeçalho")
