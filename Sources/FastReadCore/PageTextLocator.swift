@@ -31,6 +31,21 @@ public enum PageTextLocator {
     /// Verifica a seleção obtida contra o texto esperado e corrige o desvio quando a
     /// estimativa erra, o que torna o realce imune às irregularidades da indexação.
     public static func selection(on page: PDFPage, matching range: NSRange, in pageText: NSString) -> PDFSelection? {
+        locate(on: page, matching: range, in: pageText)?.selection
+    }
+
+    /// Seleção junto com o desvio que a fez fechar.
+    public struct Located {
+        public let selection: PDFSelection
+        /// Serve de ponto de partida para buscas vizinhas. Uma palavra curta não tem
+        /// âncora longa o bastante para medir o próprio desvio, mas o parágrafo que a
+        /// contém tem — e o desvio varia pouco dentro dele.
+        public let delta: Int
+    }
+
+    /// - Parameter hint: desvio conhecido da vizinhança, tentado antes da estimativa crua.
+    public static func locate(on page: PDFPage, matching range: NSRange, in pageText: NSString,
+                              hint: Int = 0) -> Located? {
         guard range.location != NSNotFound,
               range.length > 0,
               range.location >= 0,
@@ -38,7 +53,7 @@ public enum PageTextLocator {
         else { return nil }
 
         let expected = pageText.substring(with: range)
-        let estimate = boundsIndex(for: range.location, in: pageText)
+        let estimate = boundsIndex(for: range.location, in: pageText) + hint
 
         let wanted = collapsed(expected)
         // Exigir o texto inteiro idêntico não funciona em trecho de várias linhas: a
@@ -53,7 +68,7 @@ public enum PageTextLocator {
         // quebras de linha de `page.string`, que não ocupam posição entre os glifos.
         // Somá-lo esticava a seleção uma posição por linha do trecho — a sobra de ~3
         // caracteres que aparecia no fim de cada parágrafo.
-        let estimateEnd = boundsIndex(for: NSMaxRange(range) - 1, in: pageText)
+        let estimateEnd = boundsIndex(for: NSMaxRange(range) - 1, in: pageText) + hint
 
         for delta in probes {
             let start = estimate + delta
@@ -65,7 +80,7 @@ public enum PageTextLocator {
                       let text = candidate.string else { continue }
 
                 let got = collapsed(text)
-                if got == wanted { return candidate }
+                if got == wanted { return Located(selection: candidate, delta: hint + delta) }
 
                 // Sem correspondência exata: prefere quem começa igual e, entre esses,
                 // quem tem o comprimento mais próximo — é o que evita sobrar ou faltar
@@ -92,7 +107,7 @@ public enum PageTextLocator {
                           let text = candidate.string else { continue }
 
                     let got = collapsed(text)
-                    if got == wanted { return candidate }
+                    if got == wanted { return Located(selection: candidate, delta: hint + shift + delta) }
 
                     let alignedStart = got.hasPrefix(head) || wanted.hasPrefix(String(got.prefix(24)))
                     let score = (alignedStart ? 0 : 10_000) + abs(got.count - wanted.count)
@@ -116,7 +131,7 @@ public enum PageTextLocator {
                           let text = candidate.string else { continue }
 
                     let got = collapsed(text)
-                    if got == wanted { return candidate }
+                    if got == wanted { return Located(selection: candidate, delta: hint + anterior.delta) }
 
                     guard got.hasPrefix(head) || wanted.hasPrefix(String(got.prefix(24))) else { continue }
                     let score = abs(got.count - wanted.count)
@@ -126,7 +141,7 @@ public enum PageTextLocator {
         }
 
         // Melhor um realce ligeiramente torto do que nenhum.
-        return best?.selection
+        return best.map { Located(selection: $0.selection, delta: hint + $0.delta) }
     }
 
     /// Ajustes tentados só no fim, depois que o começo já está no lugar.

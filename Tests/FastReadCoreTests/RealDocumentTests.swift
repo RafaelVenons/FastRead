@@ -291,13 +291,23 @@ struct RealDocumentTests {
         var conferidas = 0
         var divergentes: [String] = []
 
+        // Documento inteiro, não a primeira página: o desvio entre os dois sistemas de
+        // índice cresce ao longo dela, e amostrar só o começo escondia exatamente os
+        // casos ruins. Relatado em uso nos trechos 69 a 71 de um artigo, onde a palavra
+        // realçada caía fora do trecho.
         for arquivo in arquivos.prefix(8) {
-            guard let doc = PDFDocument(url: arquivo),
-                  let page = doc.page(at: 0),
-                  let pageText = page.string as NSString? else { continue }
+            guard let doc = PDFDocument(url: arquivo) else { continue }
 
-            for seg in segmenter.segments(of: doc, documentLanguage: "en")
-                .filter({ $0.pageIndex == 0 }).prefix(6) {
+            for seg in segmenter.segments(of: doc, documentLanguage: "en") {
+                guard let page = doc.page(at: seg.pageIndex),
+                      let pageText = page.string as NSString? else { continue }
+
+                // O parágrafo é resolvido antes, como o app faz, e o desvio dele serve de
+                // ponto de partida para as palavras: numa palavra curta não há âncora
+                // longa o bastante para medir o desvio por conta própria.
+                let hint = seg.pageRanges.first.flatMap {
+                    PageTextLocator.locate(on: page, matching: $0, in: pageText)?.delta
+                } ?? 0
 
                 let texto = seg.text as NSString
                 // amostra palavras ao longo do trecho
@@ -318,16 +328,17 @@ struct RealDocumentTests {
                     guard let naPagina = seg.segment.sourceRange(for: noTrecho),
                           NSMaxRange(naPagina) <= pageText.length else { continue }
 
-                    let realcada = PageTextLocator.selection(on: page, matching: naPagina, in: pageText)?.string
+                    let realcada = PageTextLocator.locate(on: page, matching: naPagina,
+                                                          in: pageText, hint: hint)?.selection.string
                     conferidas += 1
                     if realcada?.trimmingCharacters(in: .whitespacesAndNewlines) != palavra {
-                        divergentes.append("\(palavra) -> \(realcada ?? "nil")")
+                        divergentes.append("#\(seg.id) \(palavra) -> \(realcada ?? "nil")")
                     }
                 }
             }
         }
 
-        #expect(conferidas > 10, "poucas amostras: \(conferidas)")
+        #expect(conferidas > 500, "poucas amostras: \(conferidas)")
         let taxa = Double(divergentes.count) / Double(max(conferidas, 1))
         #expect(taxa < 0.1,
                 "\(divergentes.count)/\(conferidas) divergiram: \(divergentes.prefix(5))")

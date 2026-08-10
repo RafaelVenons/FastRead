@@ -93,7 +93,9 @@ struct PDFCanvas: UIViewRepresentable {
             let pageIndex: Int
             let ranges: [NSRange]
         }
-        private var segmentSelections: (key: SegmentKeyForHighlight, selections: [PDFSelection])?
+        private var segmentSelections: (key: SegmentKeyForHighlight,
+                                        selections: [PDFSelection],
+                                        delta: Int)?
 
         init(onTap: @escaping (_ pageIndex: Int, _ characterIndex: Int) -> Void) {
             self.onTap = onTap
@@ -136,13 +138,19 @@ struct PDFCanvas: UIViewRepresentable {
             let chave = SegmentKeyForHighlight(pageIndex: highlight.pageIndex,
                                                ranges: highlight.segmentRanges)
             let partes: [PDFSelection]
+            let deltaDoTrecho: Int
             if let cached = segmentSelections, cached.key == chave {
                 partes = cached.selections
+                deltaDoTrecho = cached.delta
             } else {
-                partes = highlight.segmentRanges.compactMap {
-                    PageTextLocator.selection(on: page, matching: $0, in: pageText)
+                let resolvidos = highlight.segmentRanges.compactMap {
+                    PageTextLocator.locate(on: page, matching: $0, in: pageText)
                 }
-                segmentSelections = (chave, partes)
+                partes = resolvidos.map(\.selection)
+                // O desvio do parágrafo empresta-se às palavras dentro dele: uma palavra
+                // curta não tem âncora longa o bastante para medir o próprio.
+                deltaDoTrecho = resolvidos.first?.delta ?? 0
+                segmentSelections = (chave, partes, deltaDoTrecho)
             }
             for parte in partes {
                 parte.color = UIColor.systemYellow.withAlphaComponent(0.22)
@@ -155,7 +163,8 @@ struct PDFCanvas: UIViewRepresentable {
                 : partes.compactMap(\.string).joined(separator: " ")
             var word: PDFSelection?
             if let wordRange = highlight.wordRange {
-                word = PageTextLocator.selection(on: page, matching: wordRange, in: pageText)
+                word = PageTextLocator.locate(on: page, matching: wordRange, in: pageText,
+                                              hint: deltaDoTrecho)?.selection
                 if let word {
                     word.color = UIColor.systemYellow.withAlphaComponent(0.75)
                     selections.append(word)
